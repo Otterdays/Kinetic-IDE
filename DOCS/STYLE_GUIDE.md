@@ -25,6 +25,15 @@ Link non-obvious code to docs:
 
 - Target ≤ 50 lines per function and ≤ 400 lines per file where reasonable; split when it improves clarity.
 
+## Gradle / AGP 9 (project-specific)
+
+- **Built-in Kotlin:** Do not add `org.jetbrains.kotlin.android`; Kotlin Android compilation is provided by AGP ≥ 9 when the Android plugin is applied.
+- **Annotation processors:** Use **KSP** (`ksp(...)`) for Hilt and other KSP-capable processors; **kapt** is incompatible with built-in Kotlin unless you adopt `com.android.legacy-kapt` (not used here).
+- **Versions:** Declare Android plugin, KSP, Compose compiler plugin, and Hilt plugin in `settings.gradle.kts` inside `pluginManagement { plugins { ... } }` so the whole build resolves consistently.
+- **Paths:** In Gradle Kotlin DSL on Windows, prefer forward slashes in string paths inside repo-owned scripts (e.g. `"app/proguard-rules.pro"`).
+
 ---
 
 *[2026-03-28]: Initial style guide for Kotlin-first tablet IDE. Extend when Rust/NDK modules land.*
+
+*[2026-03-29]: [AMENDED] Gradle / AGP 9 subsection (built-in Kotlin, KSP, plugin management).*

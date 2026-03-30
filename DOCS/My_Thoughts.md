@@ -28,6 +28,20 @@
 
 **Note:** Display fonts in the spec are not yet bundled; system monospace/sans are placeholders until `res/font/` is added.
 
+## 2026-03-29 — AGP 9 built-in Kotlin + KSP for Hilt
+
+**Decision:** Align the `:app` module with **Android Gradle Plugin 9** defaults: no `org.jetbrains.kotlin.android` plugin; **Hilt 2.59.x** for compatibility with AGP 9’s **new DSL** (no `BaseExtension`); **KSP** instead of **kapt** because kapt is incompatible with built-in Kotlin.
+
+**Rationale:**
+
+- Matches official [migrate to built-in Kotlin](https://developer.android.com/build/migrate-to-built-in-kotlin) guidance and avoids fighting the toolchain.
+- KSP is the supported path for Hilt codegen alongside built-in Kotlin; `com.android.legacy-kapt` was avoided to reduce long-term debt.
+- Hilt 2.52-era plugins fail on AGP 9 until upgraded — staying current on Hilt avoids silent breakage on sync.
+
+**Trade-offs:** CI or agent environments that previously failed KSP (filesystem/DNS) need to be fixed at the environment layer; reverting to kapt without opting out of built-in Kotlin is not supported.
+
 ---
 
 *[2026-03-28]: First entry.*
+
+*[2026-03-29]: [AMENDED] AGP 9 / KSP / Hilt decision log.*

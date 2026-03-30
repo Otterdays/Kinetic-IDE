@@ -62,8 +62,17 @@ User input (Compose) → Agent layer (stream) → Tool dispatch → Filesystem /
 
 The **Kinetic Syntax** visual system (`stitch_sample_1/`) maps to Compose: nav rail, editor chrome, AI sidebar, terminal strip — same four-layer architecture; presentation is intentionally opinionated for tablet density and AI adjacency.
 
+## Build pipeline (Gradle / AGP 9)
+
+- **Android application plugin** (`com.android.application`) drives compilation; **Kotlin** for Android sources is handled by **AGP built-in Kotlin** (do not apply `org.jetbrains.kotlin.android`).
+- **Compose:** `org.jetbrains.kotlin.plugin.compose` (compiler aligned with Kotlin 2.3.x).
+- **DI:** Dagger **Hilt** at runtime; **KSP** generates Hilt/Dagger bindings at compile time (`hilt-compiler` on the `ksp` configuration). This replaces historical **kapt** usage under built-in Kotlin.
+- **JVM target:** Prefer `android.compileOptions` (Java 17); avoid legacy `android.kotlinOptions` unless you add a top-level `kotlin { compilerOptions { ... } }` block per [Kotlin Gradle docs](https://kotlinlang.org/docs/gradle-compiler-options.html).
+
 ---
 
 *[2026-03-28]: Initial architecture doc derived from blueprint HTML.*
 
 *[2026-03-28]: [AMENDED] L1 presentation note (Kinetic Syntax / stitch sample).*
+
+*[2026-03-29]: [AMENDED] Build pipeline section (AGP 9 built-in Kotlin, Compose plugin, KSP/Hilt).*
