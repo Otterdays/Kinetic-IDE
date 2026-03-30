@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Android Tablet IDE — Kotlin Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080c10;
+    --surface: #0d1117;
+    --surface2: #111820;
+    --border: #1e2d3d;
+    --accent: #00d4ff;
+    --accent2: #ff6b35;
+    --accent3: #7fff6b;
+    --accent4: #c77dff;
+    --text: #cdd9e5;
+    --text-dim: #546e7a;
+    --text-bright: #e8f4fd;
+    --rust: #ff6b35;
+    --kotlin: #00d4ff;
+    --ndk: #7fff6b;
+    --agent: #c77dff;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* Animated grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 60px 40px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Header */
+  .header {
+    margin-bottom: 64px;
+    border-left: 3px solid var(--accent);
+    padding-left: 24px;
+  }
+
+  .header .eyebrow {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .header h1 {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: clamp(28px, 4vw, 52px);
+    color: var(--text-bright);
+    line-height: 1.1;
+    margin-bottom: 16px;
+  }
+
+  .header h1 span {
+    color: var(--accent);
+  }
+
+  .header p {
+    color: var(--text-dim);
+    font-size: 13px;
+    max-width: 600px;
+  }
+
+  /* Layer stack */
+  .layer-stack {
+    margin-bottom: 64px;
+  }
+
+  .stack-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 24px;
+  }
+
+  .layer {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 2px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+    position: relative;
+  }
+
+  .layer:hover { border-color: rgba(0,212,255,0.3); }
+
+  .layer-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px 24px;
+    background: var(--surface);
+  }
+
+  .layer-num {
+    font-size: 10px;
+    color: var(--text-dim);
+    min-width: 20px;
+  }
+
+  .layer-tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    padding: 3px 10px;
+    border-radius: 2px;
+    min-width: 90px;
+    text-align: center;
+  }
+
+  .layer-name {
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--text-bright);
+    flex: 1;
+  }
+
+  .layer-lang {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .layer-body {
+    padding: 20px 24px 24px 60px;
+    background: var(--surface2);
+    border-top: 1px solid var(--border);
+  }
+
+  .layer-desc {
+    color: var(--text-dim);
+    font-size: 12px;
+    margin-bottom: 16px;
+    line-height: 1.7;
+  }
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .chip {
+    font-size: 10px;
+    padding: 4px 10px;
+    border-radius: 2px;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    background: var(--surface);
+  }
+
+  /* Layer color themes */
+  .layer-L1 .layer-tag { background: rgba(0,212,255,0.15); color: var(--kotlin); border: 1px solid rgba(0,212,255,0.3); }
+  .layer-L1 .layer-header { border-left: 3px solid var(--kotlin); }
+
+  .layer-L2 .layer-tag { background: rgba(199,125,255,0.15); color: var(--agent); border: 1px solid rgba(199,125,255,0.3); }
+  .layer-L2 .layer-header { border-left: 3px solid var(--agent); }
+
+  .layer-L3 .layer-tag { background: rgba(255,107,53,0.15); color: var(--rust); border: 1px solid rgba(255,107,53,0.3); }
+  .layer-L3 .layer-header { border-left: 3px solid var(--rust); }
+
+  .layer-L4 .layer-tag { background: rgba(127,255,107,0.15); color: var(--ndk); border: 1px solid rgba(127,255,107,0.3); }
+  .layer-L4 .layer-header { border-left: 3px solid var(--ndk); }
+
+  /* Connector arrows */
+  .connector {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    gap: 8px;
+    position: relative;
+  }
+
+  .connector::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--border);
+    transform: translateX(-50%);
+  }
+
+  .connector span {
+    background: var(--bg);
+    padding: 0 12px;
+    z-index: 1;
+    color: var(--text-dim);
+  }
+
+  /* Data flow section */
+  .section {
+    margin-bottom: 56px;
+  }
+
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 24px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Flow diagram */
+  .flow {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
+    align-items: center;
+    gap: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 32px 24px;
+    overflow-x: auto;
+  }
+
+  .flow-node {
+    text-align: center;
+    padding: 16px 12px;
+  }
+
+  .flow-node .node-icon {
+    font-size: 20px;
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  .flow-node .node-label {
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-bright);
+    margin-bottom: 4px;
+  }
+
+  .flow-node .node-sub {
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .flow-arrow {
+    color: var(--text-dim);
+    font-size: 18px;
+    padding: 0 4px;
+    flex-shrink: 0;
+  }
+
+  /* Code blocks */
+  .code-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+
+  .code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+
+  .code-filename {
+    font-size: 11px;
+    color: var(--accent);
+  }
+
+  .code-lang {
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  pre {
+    padding: 20px;
+    overflow-x: auto;
+    font-size: 11.5px;
+    line-height: 1.65;
+    font-family: 'Space Mono', monospace;
+  }
+
+  .kw { color: #c77dff; }
+  .fn { color: #00d4ff; }
+  .str { color: #7fff6b; }
+  .cm { color: #546e7a; font-style: italic; }
+  .ty { color: #ff6b35; }
+  .num { color: #ffd700; }
+  .ann { color: #ff9f43; }
+
+  /* Module grid */
+  .module-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+  }
+
+  .module-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+
+  .module-card:hover {
+    border-color: rgba(0,212,255,0.25);
+    transform: translateY(-2px);
+  }
+
+  .module-card .mod-tag {
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    font-weight: 700;
+  }
+
+  .module-card h3 {
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-bright);
+    margin-bottom: 8px;
+  }
+
+  .module-card p {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  .mod-kotlin .mod-tag { color: var(--kotlin); }
+  .mod-rust .mod-tag { color: var(--rust); }
+  .mod-agent .mod-tag { color: var(--agent); }
+  .mod-ndk .mod-tag { color: var(--ndk); }
+
+  /* Roadmap */
+  .roadmap {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  .phase {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+  }
+
+  .phase-label {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+
+  .phase h3 {
+    font-family: 'Syne', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-bright);
+    margin-bottom: 14px;
+  }
+
+  .phase ul {
+    list-style: none;
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 2;
+  }
+
+  .phase ul li::before {
+    content: '→ ';
+    color: var(--accent);
+  }
+
+  /* Bottom note */
+  .bottom-note {
+    margin-top: 64px;
+    padding: 24px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent2);
+    border-radius: 4px;
+    background: var(--surface);
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.8;
+  }
+
+  .bottom-note strong {
+    color: var(--accent2);
+    font-family: 'Syne', sans-serif;
+  }
+
+  @media (max-width: 700px) {
+    .container { padding: 32px 20px; }
+    .roadmap { grid-template-columns: 1fr; }
+    .flow { grid-template-columns: 1fr; }
+    .flow-arrow { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="eyebrow">// Architecture Blueprint v1.0</div>
+    <h1>Android Tablet IDE<br><span>Kotlin-Native Stack</span></h1>
+    <p>A production-grade architecture for an AI-agent-driven IDE on Android tablets. Four layers. Each owns its domain completely.</p>
+  </div>
+
+  <!-- Layer Stack -->
+  <div class="layer-stack">
+    <div class="stack-title">// Layer Architecture</div>
+
+    <!-- L1 -->
+    <div class="layer layer-L1">
+      <div class="layer-header">
+        <span class="layer-num">L1</span>
+        <span class="layer-tag">KOTLIN</span>
+        <span class="layer-name">UI & Interaction Layer</span>
+        <span class="layer-lang">Jetpack Compose + Material You</span>
+      </div>
+      <div class="layer-body">
+        <div class="layer-desc">
+          Everything the user touches. Code editor canvas, file tree, agent chat panel, terminal pane, split layouts. 
+          Drawn entirely in Compose — no XML, no legacy Views unless needed for edge cases. 
+          Handles stylus input, keyboard shortcuts, multi-window, drag-and-drop natively.
+        </div>
+        <div class="chips">
+          <span class="chip">Jetpack Compose</span>
+          <span class="chip">Material You</span>
+          <span class="chip">Canvas API</span>
+          <span class="chip">WindowManager</span>
+          <span class="chip">StylusMotionEvent</span>
+          <span class="chip">Compose Animations</span>
+          <span class="chip">LazyColumn / LazyTree</span>
+          <span class="chip">Custom DrawScope</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector"><span>↓ State / ViewModel / Coroutines ↓</span></div>
+
+    <!-- L2 -->
+    <div class="layer layer-L2">
+      <div class="layer-header">
+        <span class="layer-num">L2</span>
+        <span class="layer-tag">KOTLIN</span>
+        <span class="layer-name">Agent Orchestration Layer</span>
+        <span class="layer-lang">Coroutines + Anthropic API + LSP Client</span>
+      </div>
+      <div class="layer-body">
+        <div class="layer-desc">
+          The intelligence hub. Manages the Anthropic API stream, tool call dispatch, LSP protocol client 
+          (language server communication), conversation history, and all async I/O. 
+          Every agent tool call routes through here to the layers below. Kotlin coroutines make streaming 
+          responses and parallel tool execution clean and readable.
+        </div>
+        <div class="chips">
+          <span class="chip">Kotlin Coroutines</span>
+          <span class="chip">Flow / StateFlow</span>
+          <span class="chip">OkHttp SSE streaming</span>
+          <span class="chip">Anthropic Messages API</span>
+          <span class="chip">LSP4J client</span>
+          <span class="chip">Tool call router</span>
+          <span class="chip">Conversation state</span>
+          <span class="chip">ViewModel + Hilt DI</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector"><span>↓ JNI Bridge / Unix Sockets ↓</span></div>
+
+    <!-- L3 -->
+    <div class="layer layer-L3">
+      <div class="layer-header">
+        <span class="layer-num">L3</span>
+        <span class="layer-tag">RUST</span>
+        <span class="layer-name">Performance Core Layer</span>
+        <span class="layer-lang">Rust NDK + tree-sitter + ropey</span>
+      </div>
+      <div class="layer-body">
+        <div class="layer-desc">
+          The engine. Syntax parsing via tree-sitter (same parser powering Neovim, Zed, GitHub). 
+          Rope data structure for efficient large-file editing. Fuzzy file search, diff/patch engine, 
+          terminal emulator core (VT100/ANSI). Called from Kotlin via JNI. 
+          This is optional in Phase 1 — replace with Kotlin equivalents initially, migrate hot paths to Rust later.
+        </div>
+        <div class="chips">
+          <span class="chip">tree-sitter</span>
+          <span class="chip">ropey (rope buffer)</span>
+          <span class="chip">similar (diff)</span>
+          <span class="chip">ignore (gitignore)</span>
+          <span class="chip">alacritty_terminal</span>
+          <span class="chip">nucleo (fuzzy search)</span>
+          <span class="chip">JNI via jni-rs</span>
+          <span class="chip">tokio async runtime</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector"><span>↓ Android NDK / POSIX / Termux ABI ↓</span></div>
+
+    <!-- L4 -->
+    <div class="layer layer-L4">
+      <div class="layer-header">
+        <span class="layer-num">L4</span>
+        <span class="layer-tag">NDK / C</span>
+        <span class="layer-name">System & Filesystem Layer</span>
+        <span class="layer-lang">Android NDK + Termux bootstrap + Linux ABI</span>
+      </div>
+      <div class="layer-body">
+        <div class="layer-desc">
+          Raw access to the device. Filesystem R/W via Android Storage APIs + Termux shared storage. 
+          Process spawning (compile, run, git). Unix domain sockets for IPC with language servers. 
+          File watching via inotify. This layer is the bridge between your IDE and the actual Linux 
+          environment Termux provides.
+        </div>
+        <div class="chips">
+          <span class="chip">Android Storage API</span>
+          <span class="chip">ProcessBuilder / NDK fork</span>
+          <span class="chip">Unix domain sockets</span>
+          <span class="chip">inotify file watcher</span>
+          <span class="chip">Termux:API bridge</span>
+          <span class="chip">SAF (Storage Access Framework)</span>
+          <span class="chip">WorkManager (bg tasks)</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Data Flow -->
+  <div class="section">
+    <div class="section-title">// Agent Request Flow</div>
+    <div class="flow">
+      <div class="flow-node">
+        <span class="node-icon">⌨️</span>
+        <div class="node-label">User Input</div>
+        <div class="node-sub">Compose TextField<br>or voice</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node">
+        <span class="node-icon">🤖</span>
+        <div class="node-label">Agent Layer</div>
+        <div class="node-sub">Anthropic API<br>SSE stream</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node">
+        <span class="node-icon">🔧</span>
+        <div class="node-label">Tool Dispatch</div>
+        <div class="node-sub">read_file<br>write_file<br>run_command</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node">
+        <span class="node-icon">💾</span>
+        <div class="node-label">Filesystem</div>
+        <div class="node-sub">NDK layer<br>real device FS</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Key Modules -->
+  <div class="section">
+    <div class="section-title">// Key Modules</div>
+    <div class="module-grid">
+      <div class="module-card mod-kotlin">
+        <div class="mod-tag">Kotlin · UI</div>
+        <h3>CodeEditorPane</h3>
+        <p>Custom Compose Canvas with line numbers, syntax token coloring, cursor blink, selection highlight, gutter for breakpoints/errors.</p>
+      </div>
+      <div class="module-card mod-kotlin">
+        <div class="mod-tag">Kotlin · UI</div>
+        <h3>AgentChatPanel</h3>
+        <p>Streaming markdown renderer. Tool call visualizer shows the agent's live actions. Resizable split-pane with the editor.</p>
+      </div>
+      <div class="module-card mod-kotlin">
+        <div class="mod-tag">Kotlin · Agent</div>
+        <h3>AnthropicClient</h3>
+        <p>OkHttp SSE client. Parses streaming JSON events. Emits to a Kotlin Flow that the UI collects. Full tool use support.</p>
+      </div>
+      <div class="module-card mod-kotlin">
+        <div class="mod-tag">Kotlin · Agent</div>
+        <h3>ToolRouter</h3>
+        <p>Maps tool names from the API response to actual Android operations. Routes to Rust layer or NDK layer based on tool type.</p>
+      </div>
+      <div class="module-card mod-rust">
+        <div class="mod-tag">Rust · Core</div>
+        <h3>SyntaxEngine</h3>
+        <p>tree-sitter parser pool. Incremental re-parse on edit. Returns token spans to Kotlin for rendering. Handles 50k+ line files smoothly.</p>
+      </div>
+      <div class="module-card mod-rust">
+        <div class="mod-tag">Rust · Core</div>
+        <h3>DocumentBuffer</h3>
+        <p>Rope-based text buffer. O(log n) insert/delete. Undo history. Serializes to string on demand for API calls or file writes.</p>
+      </div>
+      <div class="module-card mod-agent">
+        <div class="mod-tag">Kotlin · LSP</div>
+        <h3>LSPManager</h3>
+        <p>Spawns language server processes (clangd, kotlin-ls, pyright). Speaks LSP over stdio. Feeds completions, diagnostics, hover docs to UI.</p>
+      </div>
+      <div class="module-card mod-ndk">
+        <div class="mod-tag">NDK · System</div>
+        <h3>ProcessHost</h3>
+        <p>Spawns compile/run/git processes. Streams stdout/stderr back as a Flow. Handles signals, timeouts, working directory.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Code Sample -->
+  <div class="section">
+    <div class="section-title">// Code Sketch — Agent Stream Handler</div>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-filename">AgentViewModel.kt</span>
+        <span class="code-lang">Kotlin</span>
+      </div>
+      <pre><span class="ann">@HiltViewModel</span>
+<span class="kw">class</span> <span class="ty">AgentViewModel</span> <span class="ann">@Inject</span> <span class="kw">constructor</span>(
+    <span class="kw">private val</span> client: <span class="ty">AnthropicClient</span>,
+    <span class="kw">private val</span> toolRouter: <span class="ty">ToolRouter</span>,
+    <span class="kw">private val</span> fileSystem: <span class="ty">FileSystemRepository</span>
+) : <span class="ty">ViewModel</span>() {
+
+    <span class="kw">val</span> agentState = <span class="fn">MutableStateFlow</span>(<span class="ty">AgentState</span>.Idle)
+    <span class="kw">val</span> messages = <span class="fn">MutableStateFlow</span>&lt;<span class="ty">List</span>&lt;<span class="ty">Message</span>&gt;&gt;(emptyList())
+
+    <span class="kw">fun</span> <span class="fn">sendMessage</span>(userText: <span class="ty">String</span>) {
+        viewModelScope.<span class="fn">launch</span> {
+            agentState.<span class="fn">emit</span>(<span class="ty">AgentState</span>.Streaming)
+
+            <span class="cm">// Stream tokens directly into UI state</span>
+            client.<span class="fn">streamMessages</span>(
+                messages = messages.value,
+                tools = toolRouter.tools
+            ).<span class="fn">collect</span> { event -&gt;
+                <span class="kw">when</span> (event) {
+                    <span class="kw">is</span> <span class="ty">StreamEvent</span>.TextDelta -&gt; <span class="fn">appendToken</span>(event.text)
+                    <span class="kw">is</span> <span class="ty">StreamEvent</span>.ToolUse  -&gt; <span class="fn">handleToolCall</span>(event)
+                    <span class="kw">is</span> <span class="ty">StreamEvent</span>.Done     -&gt; agentState.<span class="fn">emit</span>(<span class="ty">AgentState</span>.Idle)
+                }
+            }
+        }
+    }
+
+    <span class="kw">private suspend fun</span> <span class="fn">handleToolCall</span>(event: <span class="ty">StreamEvent</span>.ToolUse) {
+        <span class="kw">val</span> result = toolRouter.<span class="fn">dispatch</span>(event.name, event.input)
+        <span class="cm">// Result flows back into next API call as tool_result</span>
+        client.<span class="fn">sendToolResult</span>(event.id, result)
+    }
+}</pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-filename">CodeEditorCanvas.kt</span>
+        <span class="code-lang">Kotlin · Compose</span>
+      </div>
+      <pre><span class="ann">@Composable</span>
+<span class="kw">fun</span> <span class="fn">CodeEditorCanvas</span>(
+    buffer: <span class="ty">DocumentBuffer</span>,
+    tokens: <span class="ty">List</span>&lt;<span class="ty">SyntaxToken</span>&gt;,
+    modifier: <span class="ty">Modifier</span> = Modifier
+) {
+    <span class="kw">val</span> scrollState = <span class="fn">rememberScrollState</span>()
+    <span class="kw">val</span> density = <span class="fn">LocalDensity</span>.current
+
+    <span class="ty">Canvas</span>(modifier = modifier.<span class="fn">verticalScroll</span>(scrollState)) {
+        <span class="cm">// Draw gutter</span>
+        <span class="fn">drawRect</span>(color = gutterColor, size = <span class="ty">Size</span>(gutterWidth, size.height))
+
+        tokens.<span class="fn">forEachIndexed</span> { index, token -&gt;
+            <span class="fn">drawText</span>(
+                textMeasurer = textMeasurer,
+                text = token.text,
+                style = <span class="ty">TextStyle</span>(color = token.syntaxColor, fontSize = <span class="num">14</span>.sp),
+                topLeft = <span class="ty">Offset</span>(token.x, token.y)
+            )
+        }
+
+        <span class="cm">// Cursor blink handled by Animatable</span>
+        <span class="kw">if</span> (cursorVisible) {
+            <span class="fn">drawLine</span>(color = cursorColor, start = cursorStart, end = cursorEnd, strokeWidth = <span class="num">2f</span>)
+        }
+    }
+}</pre>
+    </div>
+  </div>
+
+  <!-- Build Roadmap -->
+  <div class="section">
+    <div class="section-title">// Build Phases</div>
+    <div class="roadmap">
+      <div class="phase">
+        <div class="phase-label">Phase 1 · Foundation</div>
+        <h3>Kotlin-Only Core</h3>
+        <ul>
+          <li>Compose split-pane layout</li>
+          <li>File tree (SAF)</li>
+          <li>Basic code editor (TextField)</li>
+          <li>Anthropic SSE client</li>
+          <li>Tool call: read/write file</li>
+          <li>Terminal via Termux:API</li>
+          <li>Kotlin-based syntax highlight</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <div class="phase-label">Phase 2 · Intelligence</div>
+        <h3>Agent + LSP</h3>
+        <ul>
+          <li>Full tool router</li>
+          <li>LSP client (completions)</li>
+          <li>Inline diagnostics in gutter</li>
+          <li>Hover docs panel</li>
+          <li>Conversation context window</li>
+          <li>Agent action visualizer</li>
+          <li>Git integration (JGit)</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <div class="phase-label">Phase 3 · Performance</div>
+        <h3>Rust Core + Polish</h3>
+        <ul>
+          <li>tree-sitter via JNI</li>
+          <li>Rope buffer for large files</li>
+          <li>Fuzzy search (nucleo)</li>
+          <li>Custom Canvas editor</li>
+          <li>Plugin/extension API</li>
+          <li>APK export pipeline</li>
+          <li>Tablet + foldable layouts</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom note -->
+  <div class="bottom-note">
+    <strong>On your current TypeScript/WebView prototype:</strong> Keep it. Use it to prove out the agent tool loop and API integration — that logic translates directly to Kotlin. The WebView layer in your current four-layer system maps 1:1 to the Compose UI layer here. The Termux bridge server maps to the NDK/ProcessHost module. Migration is additive, not a rewrite.
+  </div>
+
+</div>
+</body>
+</html>

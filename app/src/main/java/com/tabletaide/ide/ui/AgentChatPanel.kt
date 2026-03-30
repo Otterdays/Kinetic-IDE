@@ -1,0 +1,263 @@
+package com.tabletaide.ide.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.tabletaide.ide.ui.theme.KineticColors
+
+@Composable
+fun AgentChatPanel(
+    lines: List<AgentViewModel.ChatLine>,
+    busy: Boolean,
+    error: String?,
+    onSend: (String) -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var draft by remember { mutableStateOf("") }
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(KineticColors.primary),
+                )
+                Text(
+                    text = "AI ARCHITECT",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.6.sp,
+                    color = KineticColors.onSurface,
+                    modifier = Modifier.padding(start = 10.dp),
+                )
+            }
+            IconButton(onClick = onClear, enabled = !busy) {
+                Icon(Icons.Default.Clear, contentDescription = "Clear", tint = KineticColors.onSurfaceVariant)
+            }
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(KineticColors.surfaceVariant.copy(alpha = 0.4f))
+                .border(1.dp, KineticColors.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                .padding(14.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    "ASSISTANT STATUS",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
+                    color = KineticColors.outline,
+                )
+                Text(
+                    if (busy) "WORKING" else "READY",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = KineticColors.primary,
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(KineticColors.surfaceContainerLowest),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(if (busy) 0.92f else 0.45f)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(KineticColors.primary.copy(alpha = if (busy) 0.85f else 0.35f)),
+                )
+            }
+        }
+        error?.let {
+            Text(
+                text = it,
+                color = MaterialTheme.colorScheme.error,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+            )
+        }
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(lines, key = { it.id }) { line ->
+                when (line) {
+                    is AgentViewModel.ChatLine.User -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.4f))
+                                .padding(12.dp),
+                            horizontalAlignment = Alignment.End,
+                        ) {
+                            Text(
+                                text = line.text,
+                                fontSize = 12.sp,
+                                color = KineticColors.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    is AgentViewModel.ChatLine.AssistantStreaming -> {
+                        AssistantBubble(line.text.ifEmpty { "…" })
+                    }
+                    is AgentViewModel.ChatLine.AssistantDone -> {
+                        AssistantBubble(line.text)
+                    }
+                    is AgentViewModel.ChatLine.Tool -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(KineticColors.primary.copy(alpha = 0.08f))
+                                .border(1.dp, KineticColors.primary.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
+                                .padding(12.dp),
+                        ) {
+                            Text(
+                                "TOOL · ${line.name}",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = KineticColors.primary,
+                            )
+                            Text(
+                                line.detail,
+                                fontSize = 11.sp,
+                                color = KineticColors.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 6.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .padding(16.dp),
+        ) {
+            Box(modifier = Modifier.weight(1f)) {
+                TextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !busy,
+                    minLines = 3,
+                    maxLines = 5,
+                    placeholder = {
+                        Text("Ask the Architect…", color = KineticColors.outline, fontSize = 12.sp)
+                    },
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = KineticColors.surfaceBright,
+                        unfocusedContainerColor = KineticColors.surfaceBright,
+                        disabledContainerColor = KineticColors.surfaceBright.copy(alpha = 0.5f),
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        cursorColor = KineticColors.primary,
+                        focusedTextColor = KineticColors.onSurface,
+                        unfocusedTextColor = KineticColors.onSurface,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                )
+                IconButton(
+                    onClick = {
+                        onSend(draft)
+                        draft = ""
+                    },
+                    enabled = !busy && draft.isNotBlank(),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            Brush.linearGradient(
+                                listOf(KineticColors.primary, KineticColors.primaryDim),
+                            ),
+                        ),
+                ) {
+                    Icon(Icons.Default.Send, null, tint = KineticColors.onPrimaryFixed)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AssistantBubble(text: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(KineticColors.surfaceContainerHighest.copy(alpha = 0.5f))
+            .border(1.dp, KineticColors.primary.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+            .padding(12.dp),
+    ) {
+        Text(
+            text = text,
+            fontSize = 12.sp,
+            color = KineticColors.onSurface,
+            lineHeight = 18.sp,
+        )
+    }
+}

@@ -1,0 +1,22 @@
+# Gradle
+/.gradle/
+/build/
+/app/build/
+**/build/
+
+# Android
+/local.properties
+*.iml
+.idea/
+.DS_Store
+captures/
+*.apk
+*.aab
+.externalNativeBuild/
+.cxx/
+
+# Secrets (set anthropicApiKey in local.properties — see README note in DOCS/SUMMARY)
+local.properties
+
+# Kotlin tooling
+.kotlin/

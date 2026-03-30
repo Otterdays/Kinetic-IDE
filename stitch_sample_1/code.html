@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>The Kinetic Syntax - Editor</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-surface": "#dee5ff",
+              "on-primary": "#005762",
+              "on-secondary-fixed-variant": "#4e6300",
+              "surface": "#060e20",
+              "background": "#060e20",
+              "inverse-primary": "#006976",
+              "on-tertiary-fixed": "#1f0052",
+              "error-dim": "#d7383b",
+              "on-primary-fixed-variant": "#005762",
+              "primary-container": "#00e3fd",
+              "on-secondary": "#455900",
+              "primary": "#81ecff",
+              "error-container": "#9f0519",
+              "surface-tint": "#81ecff",
+              "surface-container-low": "#091328",
+              "surface-container-lowest": "#000000",
+              "on-tertiary-fixed-variant": "#4700a7",
+              "secondary-fixed": "#c3f400",
+              "primary-fixed": "#00e3fd",
+              "secondary-dim": "#b7e500",
+              "surface-container-high": "#141f38",
+              "on-primary-fixed": "#003840",
+              "on-secondary-container": "#efffbc",
+              "tertiary": "#ac89ff",
+              "on-tertiary-container": "#f8f1ff",
+              "error": "#ff716c",
+              "outline-variant": "#40485d",
+              "on-error": "#490006",
+              "secondary-container": "#506600",
+              "tertiary-container": "#7000ff",
+              "surface-variant": "#192540",
+              "primary-fixed-dim": "#00d4ec",
+              "on-background": "#dee5ff",
+              "outline": "#6d758c",
+              "surface-container-highest": "#192540",
+              "on-error-container": "#ffa8a3",
+              "tertiary-fixed-dim": "#b190ff",
+              "surface-dim": "#060e20",
+              "tertiary-dim": "#874cff",
+              "inverse-surface": "#faf8ff",
+              "secondary": "#c3f400",
+              "secondary-fixed-dim": "#b7e500",
+              "on-tertiary": "#290067",
+              "on-surface-variant": "#a3aac4",
+              "surface-container": "#0f1930",
+              "surface-bright": "#1f2b49",
+              "on-secondary-fixed": "#354500",
+              "primary-dim": "#00d4ec",
+              "tertiary-fixed": "#bda1ff",
+              "inverse-on-surface": "#4d556b",
+              "on-primary-container": "#004d57"
+            },
+            fontFamily: {
+              "headline": ["Space Grotesk"],
+              "body": ["Inter"],
+              "label": ["Inter"],
+              "mono": ["JetBrains Mono"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            text-transform: none;
+            letter-spacing: normal;
+            word-wrap: normal;
+            white-space: nowrap;
+            direction: ltr;
+        }
+        .syntax-keyword { color: #c3f400; }
+        .syntax-function { color: #81ecff; }
+        .syntax-string { color: #ac89ff; }
+        .syntax-comment { color: #6d758c; }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #192540; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #40485d; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body overflow-hidden h-screen flex">
+<!-- SideNavBar (Rail) -->
+<aside class="fixed left-0 top-0 h-full z-40 bg-[#141f38] dark:bg-slate-900 h-full w-20 flex flex-col items-center py-6 border-r-0 shadow-[inset_-1px_0_0_0_rgba(255,255,255,0.05)]">
+<div class="mb-8">
+<span class="text-[#00FFC2] font-black tracking-tighter text-2xl font-headline">KS</span>
+</div>
+<nav class="flex-1 flex flex-col items-center space-y-8 w-full">
+<button class="text-[#00FFC2] relative after:absolute after:left-0 after:w-1 after:h-8 after:bg-[#00FFC2] after:rounded-r-full group flex flex-col items-center gap-1 active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-2xl" data-icon="folder_shared">folder_shared</span>
+<span class="font-['Space_Grotesk'] text-xs tracking-wider uppercase">Projects</span>
+</button>
+<button class="text-slate-500 hover:text-slate-300 transition-colors group flex flex-col items-center gap-1 active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-2xl" data-icon="inventory_2">inventory_2</span>
+<span class="font-['Space_Grotesk'] text-xs tracking-wider uppercase">Explorer</span>
+</button>
+<button class="text-slate-500 hover:text-slate-300 transition-colors group flex flex-col items-center gap-1 active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-2xl" data-icon="search">search</span>
+<span class="font-['Space_Grotesk'] text-xs tracking-wider uppercase">Search</span>
+</button>
+<button class="text-slate-500 hover:text-slate-300 transition-colors group flex flex-col items-center gap-1 active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-2xl" data-icon="extension">extension</span>
+<span class="font-['Space_Grotesk'] text-xs tracking-wider uppercase">Extensions</span>
+</button>
+</nav>
+<div class="mt-auto flex flex-col items-center space-y-6 w-full">
+<button class="p-3 rounded-full bg-white/5 hover:bg-white/10 transition-all duration-200 text-[#00FFC2]">
+<span class="material-symbols-outlined" data-icon="smart_toy">smart_toy</span>
+</button>
+<button class="text-slate-500 hover:text-slate-300 transition-colors active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-2xl" data-icon="settings">settings</span>
+</button>
+</div>
+</aside>
+<!-- Main Content Area -->
+<div class="flex-1 flex flex-col ml-20 h-full relative">
+<!-- TopNavBar -->
+<header class="fixed top-0 right-0 left-20 z-30 px-6 h-14 flex justify-between items-center bg-[#0f1930] dark:bg-slate-900/90 backdrop-blur-md shadow-sm">
+<div class="flex items-center space-x-6">
+<span class="hidden md:block text-[#00FFC2] font-bold tracking-widest font-headline">Kinetic IDE</span>
+<div class="flex items-center space-x-4">
+<button class="text-[#00FFC2] border-b-2 border-[#00FFC2] pb-4 font-['Space_Grotesk'] text-sm font-semibold h-14 flex items-center">main.py</button>
+<button class="text-slate-400 font-medium hover:text-white transition-colors h-14 flex items-center font-['Space_Grotesk'] text-sm">utils/auth.ts</button>
+<button class="text-slate-400 font-medium hover:text-white transition-colors h-14 flex items-center font-['Space_Grotesk'] text-sm">styles.css</button>
+</div>
+</div>
+<div class="flex items-center space-x-4">
+<div class="flex items-center space-x-2 mr-4">
+<span class="material-symbols-outlined text-on-surface-variant hover:text-white transition-colors cursor-pointer" data-icon="bolt">bolt</span>
+<span class="material-symbols-outlined text-on-surface-variant hover:text-white transition-colors cursor-pointer" data-icon="auto_awesome">auto_awesome</span>
+<span class="material-symbols-outlined text-on-surface-variant hover:text-white transition-colors cursor-pointer" data-icon="account_tree">account_tree</span>
+</div>
+<button class="px-4 py-1.5 rounded-lg bg-surface-container-highest border border-outline-variant text-on-surface text-sm hover:bg-surface-bright transition-all">Debug</button>
+<button class="px-4 py-1.5 rounded-lg bg-gradient-to-br from-primary to-primary-dim text-on-primary-fixed font-semibold text-sm hover:opacity-90 transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-lg" data-icon="play_arrow">play_arrow</span>
+                    Execute
+                </button>
+</div>
+</header>
+<!-- Editor Workspace (Split View) -->
+<main class="mt-14 flex-1 flex overflow-hidden">
+<!-- Code Editor Area -->
+<section class="flex-1 flex flex-col bg-surface-container-low min-w-0">
+<!-- Breadcrumbs -->
+<nav class="h-8 px-10 flex items-center bg-surface-container-lowest/30 text-[10px] font-mono text-on-surface-variant uppercase tracking-widest border-b border-white/5">
+<span class="hover:text-primary cursor-pointer">src</span>
+<span class="mx-2 opacity-50">/</span>
+<span class="hover:text-primary cursor-pointer">core</span>
+<span class="mx-2 opacity-50">/</span>
+<span class="text-on-surface">main.py</span>
+</nav>
+<!-- Editor Surface -->
+<div class="flex-1 overflow-auto flex font-mono text-sm relative">
+<!-- Line Numbers Gutter -->
+<div class="w-12 py-10 bg-surface-container-low text-right pr-4 text-outline select-none flex flex-col space-y-0.5 leading-6">
+<span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span><span>11</span><span>12</span><span>13</span><span>14</span><span>15</span><span>16</span><span>17</span><span>18</span><span>19</span><span>20</span>
+</div>
+<!-- Editor Canvas -->
+<div class="flex-1 py-10 px-6 bg-surface-container leading-6 text-on-surface whitespace-pre">
+<span class="syntax-keyword">import</span> os
+<span class="syntax-keyword">from</span> typing <span class="syntax-keyword">import</span> List, Optional
+
+<span class="syntax-comment"># AI-Powered Optimization Engine</span>
+<span class="syntax-keyword">class</span> <span class="syntax-function">KineticProcessor</span>:
+    <span class="syntax-keyword">def</span> <span class="syntax-function">__init__</span>(self, model_id: str):
+        self.model = model_id
+        self.active = <span class="syntax-keyword">True</span>
+<span class="syntax-keyword">def</span> <span class="syntax-function">process_syntax</span>(self, payload: dict) -&gt; List[str]:
+        <span class="syntax-string">"""
+        Parses incoming code structures for potential AI enhancements.
+        """</span>
+<span class="syntax-keyword">if</span> <span class="syntax-keyword">not</span> payload:
+            <span class="syntax-keyword">return</span> []
+        
+        result = []
+        <span class="syntax-comment"># Optimized loop sequence</span>
+<span class="syntax-keyword">for</span> item <span class="syntax-keyword">in</span> payload.get(<span class="syntax-string">"nodes"</span>, []):
+            processed = self._analyze_node(item)
+            result.append(processed)
+        
+        <span class="syntax-keyword">return</span> result
+                    </div>
+<!-- AI Aura Suggestion Card (Floating) -->
+<div class="absolute top-1/2 left-1/3 bg-surface-variant/80 backdrop-blur-xl p-4 rounded-xl border border-primary/20 shadow-[0px_20px_40px_rgba(129,236,255,0.08)] max-w-xs animate-pulse-subtle">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="auto_awesome">auto_awesome</span>
+<span class="text-[10px] uppercase tracking-tighter text-primary font-bold">AI Suggestion</span>
+</div>
+<p class="text-xs text-on-surface-variant mb-3">Refactor this loop to a list comprehension for 12% better performance.</p>
+<button class="w-full py-2 bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all">Apply Change</button>
+</div>
+</div>
+<!-- Integrated Terminal -->
+<section class="h-48 bg-surface-container-lowest border-t border-white/5 flex flex-col">
+<div class="h-8 px-4 flex items-center justify-between bg-surface-container-high/50">
+<div class="flex items-center space-x-6 h-full">
+<button class="text-[10px] font-bold uppercase tracking-widest text-primary border-b border-primary h-full px-2">Terminal</button>
+<button class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant hover:text-on-surface transition-colors h-full px-2">Output</button>
+<button class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant hover:text-on-surface transition-colors h-full px-2">Debug Console</button>
+</div>
+<div class="flex items-center space-x-2">
+<span class="material-symbols-outlined text-xs text-on-surface-variant hover:text-on-surface cursor-pointer" data-icon="add">add</span>
+<span class="material-symbols-outlined text-xs text-on-surface-variant hover:text-on-surface cursor-pointer" data-icon="close">close</span>
+</div>
+</div>
+<div class="flex-1 p-4 font-mono text-xs overflow-auto text-on-surface-variant">
+<div class="flex items-center gap-2 mb-1">
+<span class="text-secondary">kinetic-syntax</span>
+<span class="text-on-surface">~ %</span>
+<span class="text-on-surface">python3 main.py --optimize</span>
+</div>
+<div class="mb-1 text-on-surface/50">[INFO] Loading neural architecture...</div>
+<div class="mb-1 text-on-surface/50">[INFO] Checkpointing weights...</div>
+<div class="mb-1 text-primary">[SUCCESS] Model deployed successfully at local:8080</div>
+<div class="flex items-center gap-2 animate-pulse">
+<span class="text-secondary">kinetic-syntax</span>
+<span class="text-on-surface">~ %</span>
+<span class="w-2 h-4 bg-primary"></span>
+</div>
+</div>
+</section>
+</section>
+<!-- AI Assistant Sidebar Overlay -->
+<aside class="w-80 bg-surface-container-high shadow-[-4px_0_24px_rgba(0,0,0,0.5)] flex flex-col">
+<div class="p-4 flex items-center justify-between border-b border-white/5">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_#81ecff]"></div>
+<h2 class="font-headline font-bold text-sm tracking-wide">AI ARCHITECT</h2>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant text-sm cursor-pointer" data-icon="unfold_more">unfold_more</span>
+</div>
+<div class="flex-1 overflow-auto p-4 space-y-4">
+<!-- AI Status Indicator -->
+<div class="bg-surface-variant/40 rounded-xl p-4 border border-outline-variant/30">
+<div class="flex items-center justify-between mb-2">
+<span class="text-[10px] font-bold text-outline uppercase tracking-widest">Assistant Status</span>
+<span class="text-[10px] font-bold text-primary uppercase">Ready</span>
+</div>
+<div class="w-full bg-surface-container-lowest h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-full opacity-50"></div>
+</div>
+</div>
+<!-- AI Chat Message -->
+<div class="bg-surface-container-highest/50 rounded-xl p-3 border-l-2 border-primary">
+<p class="text-xs text-on-surface leading-relaxed">
+                            I've analyzed your <code class="bg-white/5 px-1 rounded text-primary">process_syntax</code> function. Would you like me to generate unit tests for the edge cases?
+                        </p>
+<div class="mt-3 flex flex-wrap gap-2">
+<span class="px-3 py-1 bg-tertiary-container/30 text-on-tertiary-container rounded-full text-[10px] font-medium border border-tertiary-dim/20">Generate Tests</span>
+<span class="px-3 py-1 bg-surface-bright text-on-surface-variant rounded-full text-[10px] font-medium border border-outline-variant/30">Explain Code</span>
+</div>
+</div>
+<!-- User Query -->
+<div class="bg-surface-container/40 rounded-xl p-3 text-right">
+<p class="text-xs text-on-surface-variant">Yes, please focus on the list comprehension optimization you mentioned.</p>
+</div>
+<!-- Visual Component Suggestion -->
+<div class="rounded-xl overflow-hidden border border-outline-variant/20">
+<img class="w-full h-32 object-cover opacity-60" data-alt="High-tech glowing circuit board with cyan light traces representing neural network data flow" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC8XPSa1r3sZWAz9DhVa4ZWMmgumTRFkftDbTVLM6TXKkWU7IdeebMrxneh5WfGW4Rva9ooN7ZwcT_1La6KDBiOI187mx1DWS_JuXv35vczyCICihnVxPvpcJducQiPoUvIGHwvFm10RKnC6VPb4LM5tHgD8B97MXpaytWoRKFrnddDDh_OCHkm8uOtqptJUMOJqdGqgVpA5zOO1QKnzLr4cyhyzJrcDC3lLoMqX1qbQqnIe6VN-oq2iLoBTF9xYMwG0-i_1Vdxo-TV"/>
+<div class="p-3 bg-surface-container-highest">
+<span class="text-[10px] font-bold text-primary uppercase">Suggested Asset</span>
+<p class="text-[10px] text-on-surface-variant">Architecture diagram for Processor class</p>
+</div>
+</div>
+</div>
+<!-- AI Input -->
+<div class="p-4 bg-surface-container-high border-t border-white/5">
+<div class="relative">
+<textarea class="w-full bg-surface-bright border-none rounded-xl text-xs text-on-surface placeholder:text-outline focus:ring-1 focus:ring-primary p-3 min-h-[80px] resize-none" placeholder="Ask the Architect..."></textarea>
+<button class="absolute bottom-2 right-2 p-1.5 bg-primary text-on-primary-fixed rounded-lg hover:opacity-90 transition-all">
+<span class="material-symbols-outlined text-sm" data-icon="send">send</span>
+</button>
+</div>
+</div>
+</aside>
+</main>
+<!-- BottomNavBar (Status Bar) -->
+<footer class="fixed bottom-0 left-20 right-0 h-6 z-50 flex items-center px-4 space-x-6 bg-[#060e20] dark:bg-black border-t border-white/5">
+<div class="flex items-center space-x-4">
+<div class="text-slate-500 text-[10px] font-bold">Kinetic IDE</div>
+<div class="text-[#00FFC2] flex items-center space-x-1 font-['JetBrains_Mono'] text-[10px] font-medium">
+<span class="material-symbols-outlined text-sm" data-icon="call_split">call_split</span>
+<span>main</span>
+</div>
+<div class="text-slate-400 flex items-center space-x-1 font-['JetBrains_Mono'] text-[10px] font-medium">
+<span class="material-symbols-outlined text-sm" data-icon="code">code</span>
+<span>Python 3.10.2</span>
+</div>
+</div>
+<div class="ml-auto flex items-center space-x-6">
+<div class="text-slate-400 flex items-center space-x-1 font-['JetBrains_Mono'] text-[10px] font-medium">
+<span class="material-symbols-outlined text-sm" data-icon="gps_fixed">gps_fixed</span>
+<span>Ln 42, Col 12</span>
+</div>
+<div class="text-slate-400 flex items-center space-x-1 font-['JetBrains_Mono'] text-[10px] font-medium">
+<span class="material-symbols-outlined text-sm" data-icon="text_snippet">text_snippet</span>
+<span>UTF-8</span>
+</div>
+<div class="flex items-center space-x-1">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+<span class="text-[10px] font-bold text-on-surface-variant">AI LIVE</span>
+</div>
+</div>
+</footer>
+</div>
+</body></html>
