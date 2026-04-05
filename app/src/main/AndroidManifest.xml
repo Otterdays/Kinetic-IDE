@@ -4,13 +4,13 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
-        android:name=".TabletAiIdeApp"
+        android:name=".KineticApp"
         android:allowBackup="true"
         android:icon="@drawable/ic_launcher_foreground"
         android:label="@string/app_name"
         android:roundIcon="@drawable/ic_launcher_foreground"
         android:supportsRtl="true"
-        android:theme="@style/Theme.TabletAIIDE">
+        android:theme="@style/Theme.Kinetic">
         <activity
             android:name=".MainActivity"
             android:exported="true"

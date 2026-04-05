@@ -1,12 +1,13 @@
 <!-- PRESERVATION RULE: Never delete or replace content. Append or annotate only. -->
 
-# Tablet AI IDE — Project summary
+# Kinetic — Project summary
 
 ## Snapshot — 2026-03-29
 
 - **Build:** `:app:assembleDebug` verified with **AGP 9.1** built-in Kotlin, **Hilt 2.59** + **KSP** (see `DOCS/CHANGELOG.md` *Unreleased*).
 - **Docs index:** root [`README.md`](../README.md) for prerequisites and commands; this file for depth and blueprint links.
 - **[AMENDED 2026-03-29]:** [`README.md`](../README.md) refreshed for GitHub (badges, feature table, preview image, Cursor JDK notes); [`.vscode/settings.json`](../.vscode/settings.json) documents Red Hat Java / Gradle JVM fix.
+- **[AMENDED 2026-03-29]:** Product name **Kinetic**; canonical repo [Otterdays/Kinetic-IDE](https://github.com/Otterdays/Kinetic-IDE) (was Tablet-IDE).
 
 **Status:** Phase 1 `:app` in progress — **Kinetic Syntax** UI (`stitch_sample_1`) applied; `:app:compileDebugKotlin` verified locally. Full APK: `gradlew :app:assembleDebug` (needs SDK + network for deps).
 

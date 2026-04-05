@@ -1,6 +1,6 @@
 <!-- PRESERVATION RULE: Never delete or replace content. Append or annotate only. -->
 
-# STYLE_GUIDE — Tablet AI IDE
+# STYLE_GUIDE — Kinetic
 
 ## Trace tags
 

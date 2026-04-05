@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Product/repo identity **Kinetic**: launcher label, `rootProject.name`, `Theme.Kinetic`, `KineticApp` / `KineticTheme`; docs/README titles. Package id remains `com.tabletaide.ide`. Remote: [Otterdays/Kinetic-IDE](https://github.com/Otterdays/Kinetic-IDE).
 - `README.md`: GitHub-oriented layout (shields, feature table, Kinetic Syntax preview image, stack/contributing/license sections); documents `.vscode` JDK settings for Cursor/VS Code.
 - `gradle.properties`: set **`org.gradle.java.home`** to a full JDK so AGP’s `JdkImageTransform` can run `jlink` when the IDE would otherwise use a JRE without it (e.g. Cursor + Red Hat Java). Adjust path per machine or override in `~/.gradle/gradle.properties`.
 - Gradle: AGP 9 **built-in Kotlin** — removed `org.jetbrains.kotlin.android`; Hilt **2.59.2** with **KSP** 2.3.6 (replaces kapt, required with built-in Kotlin); removed `android.kotlinOptions` (JVM target follows `compileOptions`).

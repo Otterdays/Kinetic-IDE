@@ -1,6 +1,6 @@
 <!-- PRESERVATION RULE: Never delete or replace content. Append or annotate only. -->
 
-# SBOM — Tablet AI IDE
+# SBOM — Kinetic
 
 **Last updated:** 2026-03-29 ([AMENDED]: README/GitHub + `.vscode` JDK settings documented; no dependency version changes this pass). Prior: AGP built-in Kotlin — no `kotlin.android` plugin; Hilt 2.59.2 + KSP 2.3.6; Gradle wrapper 9.4.1; AGP 9.1.0; Kotlin 2.3.10 (Compose compiler plugin).
 

@@ -36,7 +36,7 @@ private val KineticScheme = darkColorScheme(
 )
 
 @Composable
-fun TabletAiIdeTheme(content: @Composable () -> Unit) {
+fun KineticTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = KineticScheme,
         typography = IdeTypography,

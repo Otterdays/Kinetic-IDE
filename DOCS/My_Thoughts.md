@@ -40,8 +40,16 @@
 
 **Trade-offs:** CI or agent environments that previously failed KSP (filesystem/DNS) need to be fixed at the environment layer; reverting to kapt without opting out of built-in Kotlin is not supported.
 
+## 2026-03-29 — Product name: Kinetic
+
+**Decision:** Ship the app and Gradle project under the name **Kinetic**; GitHub repo **Kinetic-IDE** (`Otterdays/Kinetic-IDE`).
+
+**Rationale:** Aligns public name with the **Kinetic Syntax** UI system; shorter launcher and README identity. **`applicationId`** / Kotlin packages stay **`com.tabletaide.ide`** to avoid a disruptive package move and Play reinstall semantics until a deliberate migration.
+
 ---
 
 *[2026-03-28]: First entry.*
 
 *[2026-03-29]: [AMENDED] AGP 9 / KSP / Hilt decision log.*
+
+*[2026-03-29]: [AMENDED] Product name Kinetic + Kinetic-IDE repo.*

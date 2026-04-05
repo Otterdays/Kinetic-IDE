@@ -20,5 +20,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "TabletAIIDE"
+rootProject.name = "Kinetic"
 include(":app")

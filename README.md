@@ -1,6 +1,6 @@
-# Tablet AI IDE
+# Kinetic
 
-**Tablet-first Android IDE shell** with an AI agent loop: split editor, SAF workspace, streaming tools, and a **Kinetic Syntax** UI built in Jetpack Compose.
+**Tablet-first Android IDE** with an AI agent loop: split editor, SAF workspace, streaming tools, and the **Kinetic Syntax** UI in Jetpack Compose.
 
 [![Platform](https://img.shields.io/badge/platform-Android-3DDC84?logo=android&logoColor=white)](https://developer.android.com/)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.3-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/)
@@ -16,7 +16,7 @@
 Design reference (Kinetic Syntax — `stitch_sample_1`):
 
 <p align="center">
-  <img src="stitch_sample_1/screen.png" alt="Tablet IDE UI concept — Kinetic Syntax" width="720" />
+  <img src="stitch_sample_1/screen.png" alt="Kinetic IDE — Kinetic Syntax concept" width="720" />
 </p>
 
 <p align="center">
@@ -105,6 +105,8 @@ Full table: [`DOCS/SBOM.md`](DOCS/SBOM.md)
 | [`DOCS/My_Thoughts.md`](DOCS/My_Thoughts.md) | Architecture decisions |
 
 Blueprint narrative: [`claude_ide_recommendation.html`](claude_ide_recommendation.html) · UI tokens: [`stitch_sample_1/DESIGN.md`](stitch_sample_1/DESIGN.md)
+
+**Repository:** [github.com/Otterdays/Kinetic-IDE](https://github.com/Otterdays/Kinetic-IDE)
 
 ---
 

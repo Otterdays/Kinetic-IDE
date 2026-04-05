@@ -1,6 +1,6 @@
 <!-- PRESERVATION RULE: Never delete or replace content. Append or annotate only. -->
 
-# ARCHITECTURE — Tablet AI IDE
+# ARCHITECTURE — Kinetic
 
 **Canonical narrative:** See `claude_ide_recommendation.html` in the repository root for full copy, chips, and code sketches.
 
