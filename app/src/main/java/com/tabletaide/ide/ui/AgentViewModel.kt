@@ -8,8 +8,10 @@ import com.tabletaide.ide.agent.GeminiClientImpl
 import com.tabletaide.ide.agent.LlmClient
 import com.tabletaide.ide.agent.StreamEvent
 import com.tabletaide.ide.agent.ToolRouter
+import com.tabletaide.ide.data.LlmCredentialState
 import com.tabletaide.ide.data.LlmProvider
 import com.tabletaide.ide.data.LlmProviderStore
+import com.tabletaide.ide.data.WorkspaceRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,6 +20,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 
@@ -27,6 +32,7 @@ class AgentViewModel @Inject constructor(
     private val geminiClient: GeminiClientImpl,
     private val toolRouter: ToolRouter,
     private val providerStore: LlmProviderStore,
+    private val workspace: WorkspaceRepository,
 ) : ViewModel() {
 
     private fun getClient(): LlmClient = when (_provider.value) {
@@ -40,6 +46,9 @@ class AgentViewModel @Inject constructor(
     private val _provider = MutableStateFlow(providerStore.getProvider())
     val provider: StateFlow<LlmProvider> = _provider.asStateFlow()
 
+    private val _credentials = MutableStateFlow(providerStore.getCredentialState())
+    val credentials: StateFlow<LlmCredentialState> = _credentials.asStateFlow()
+
     private val _lines = MutableStateFlow<List<ChatLine>>(emptyList())
     val lines: StateFlow<List<ChatLine>> = _lines.asStateFlow()
 
@@ -52,6 +61,11 @@ class AgentViewModel @Inject constructor(
     fun setProvider(provider: LlmProvider) {
         providerStore.setProvider(provider)
         _provider.value = provider
+    }
+
+    fun setApiKey(provider: LlmProvider, apiKey: String) {
+        providerStore.setApiKey(provider, apiKey)
+        _credentials.value = providerStore.getCredentialState()
     }
 
     fun sendUserMessage(text: String, systemPromptAppendix: String = "") {
@@ -134,8 +148,46 @@ class AgentViewModel @Inject constructor(
 
             val toolResults = JSONArray()
             for (call in toolCalls) {
+                val provider = _provider.value
+                val startedAtMillis = System.currentTimeMillis()
+                val pathRaw = call.input.optString("path").trim().trim('/')
+                val captureMutation =
+                    pathRaw.isNotBlank() &&
+                    (call.name == "write_file" || call.name == "edit_file")
+                val beforeSnap = if (captureMutation) {
+                    workspace.readText(pathRaw).getOrNull() ?: ""
+                } else {
+                    ""
+                }
                 val resultText = toolRouter.dispatch(call.name, call.input)
-                appendToolLine(call.name, call.input, resultText)
+                val mutation = if (captureMutation &&
+                    pathRaw.isNotBlank() &&
+                    !resultText.startsWith("Error:")
+                ) {
+                    val afterSnap = workspace.readText(pathRaw).getOrNull() ?: ""
+                    ToolMutationAction(
+                        path = pathRaw,
+                        beforeSnapshot = beforeSnap,
+                        afterSnapshot = afterSnap,
+                    )
+                } else {
+                    null
+                }
+                val durationMs = System.currentTimeMillis() - startedAtMillis
+                appendToolLine(
+                    name = call.name,
+                    input = call.input,
+                    resultText = resultText,
+                    mutation = mutation,
+                    receipt = ToolReceipt(
+                        providerName = provider.displayName,
+                        toolName = call.name,
+                        target = toolTargetSummary(call.name, call.input),
+                        status = if (resultText.startsWith("Error:")) "FAILED" else "OK",
+                        startedAt = receiptTimeFormat.format(Date(startedAtMillis)),
+                        durationMs = durationMs,
+                    ),
+                )
                 toolResults.put(
                     JSONObject()
                         .put("type", "tool_result")
@@ -183,7 +235,121 @@ class AgentViewModel @Inject constructor(
         }
     }
 
-    private fun appendToolLine(name: String, input: JSONObject, resultText: String) {
+    fun revertToolMutation(chatLineId: String) {
+        if (_busy.value) return
+        viewModelScope.launch {
+            val line = _lines.value.find { it is ChatLine.Tool && it.id == chatLineId } as? ChatLine.Tool
+                ?: return@launch
+            val m = line.mutation ?: return@launch
+            if (m.phase != ToolMutationPhase.APPLIED_ON_DISK) return@launch
+
+            val cur = workspace.readText(m.path).getOrElse { e ->
+                patchToolMutationLine(
+                    chatLineId,
+                    m.copy(
+                        phase = ToolMutationPhase.CONFLICT,
+                        conflictDetail = e.message ?: "Could not read file",
+                    ),
+                )
+                return@launch
+            }
+            if (cur != m.afterSnapshot) {
+                patchToolMutationLine(
+                    chatLineId,
+                    m.copy(
+                        phase = ToolMutationPhase.CONFLICT,
+                        conflictDetail = "File changed since agent write; revert blocked.",
+                    ),
+                )
+                return@launch
+            }
+            workspace.writeText(m.path, m.beforeSnapshot).fold(
+                onSuccess = {
+                    patchToolMutationLine(
+                        chatLineId,
+                        m.copy(phase = ToolMutationPhase.REVERTED, conflictDetail = null),
+                    )
+                },
+                onFailure = { e ->
+                    patchToolMutationLine(
+                        chatLineId,
+                        m.copy(
+                            phase = ToolMutationPhase.CONFLICT,
+                            conflictDetail = e.message ?: "Revert write failed",
+                        ),
+                    )
+                },
+            )
+        }
+    }
+
+    fun applyToolMutation(chatLineId: String) {
+        if (_busy.value) return
+        viewModelScope.launch {
+            val line = _lines.value.find { it is ChatLine.Tool && it.id == chatLineId } as? ChatLine.Tool
+                ?: return@launch
+            val m = line.mutation ?: return@launch
+            if (m.phase != ToolMutationPhase.REVERTED) return@launch
+
+            val cur = workspace.readText(m.path).getOrElse { e ->
+                patchToolMutationLine(
+                    chatLineId,
+                    m.copy(
+                        phase = ToolMutationPhase.CONFLICT,
+                        conflictDetail = e.message ?: "Could not read file",
+                    ),
+                )
+                return@launch
+            }
+            if (cur != m.beforeSnapshot) {
+                patchToolMutationLine(
+                    chatLineId,
+                    m.copy(
+                        phase = ToolMutationPhase.CONFLICT,
+                        conflictDetail = "File changed since revert; apply blocked.",
+                    ),
+                )
+                return@launch
+            }
+            workspace.writeText(m.path, m.afterSnapshot).fold(
+                onSuccess = {
+                    patchToolMutationLine(
+                        chatLineId,
+                        m.copy(phase = ToolMutationPhase.APPLIED_ON_DISK, conflictDetail = null),
+                    )
+                },
+                onFailure = { e ->
+                    patchToolMutationLine(
+                        chatLineId,
+                        m.copy(
+                            phase = ToolMutationPhase.CONFLICT,
+                            conflictDetail = e.message ?: "Apply write failed",
+                        ),
+                    )
+                },
+            )
+        }
+    }
+
+    private fun patchToolMutationLine(chatLineId: String, newMutation: ToolMutationAction) {
+        _lines.update { list ->
+            list.map { line ->
+                if (line is ChatLine.Tool && line.id == chatLineId) {
+                    line.copy(mutation = newMutation)
+                } else {
+                    line
+                }
+            }
+        }
+    }
+
+    private fun appendToolLine(
+        name: String,
+        input: JSONObject,
+        resultText: String,
+        mutation: ToolMutationAction?,
+        receipt: ToolReceipt,
+    ) {
         val inputJson = try {
             input.toString(2)
         } catch (_: Exception) {
@@ -202,7 +368,24 @@ class AgentViewModel @Inject constructor(
                 inputJson = inputJson,
                 resultFull = full,
                 preview = preview,
+                mutation = mutation,
+                receipt = receipt,
             )
+        }
+    }
+
+    private fun toolTargetSummary(name: String, input: JSONObject): String {
+        val path = input.optString("path").takeIf { it.isNotBlank() }
+        return when (name) {
+            "list_files" -> "workspace"
+            "search_files" -> input.optString("pattern").takeIf { it.isNotBlank() }?.let {
+                "pattern: $it"
+            } ?: "workspace"
+            "rename_path" -> {
+                val newName = input.optString("new_name").takeIf { it.isNotBlank() }
+                if (path != null && newName != null) "$path -> $newName" else path ?: "workspace"
+            }
+            else -> path ?: "workspace"
         }
     }
 
@@ -226,6 +409,20 @@ class AgentViewModel @Inject constructor(
 
     private data class ToolCall(val id: String, val name: String, val input: JSONObject)
 
+    enum class ToolMutationPhase {
+        APPLIED_ON_DISK,
+        REVERTED,
+        CONFLICT,
+    }
+
+    data class ToolMutationAction(
+        val path: String,
+        val beforeSnapshot: String,
+        val afterSnapshot: String,
+        val phase: ToolMutationPhase = ToolMutationPhase.APPLIED_ON_DISK,
+        val conflictDetail: String? = null,
+    )
+
     sealed class ChatLine {
         abstract val id: String
 
@@ -238,11 +435,23 @@ class AgentViewModel @Inject constructor(
             val inputJson: String,
             val resultFull: String,
             val preview: String,
+            val mutation: ToolMutationAction?,
+            val receipt: ToolReceipt,
         ) : ChatLine()
     }
+
+    data class ToolReceipt(
+        val providerName: String,
+        val toolName: String,
+        val target: String,
+        val status: String,
+        val startedAt: String,
+        val durationMs: Long,
+    )
 
     private companion object {
         private const val TOOL_RESULT_UI_MAX_CHARS = 100_000
         private const val TOOL_PREVIEW_CHARS = 600
+        private val receiptTimeFormat = SimpleDateFormat("HH:mm:ss", Locale.US)
     }
 }

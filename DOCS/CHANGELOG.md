@@ -10,6 +10,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **[ROADMAP Epic 1.2 / Epic 2.2]** Explorer filter hoisted to **`IdeViewModel`** (`explorerTreeFilterQuery`, **`filteredTree`** via `filterTreeRows`); **`FileTreePane`** uses discrete lazy items + **content types** for STARRED / RECENT / tree rows. **`AgentViewModel`** + **`WorkspaceRepository`**: **`ToolMutationAction`** on successful **`write_file`** / **`edit_file`** tool rows — expanded card **Revert file** / **Apply again** with compare-and-swap and **CONFLICT** messaging when disk diverges.
+
+- **Gradle IDE sync compatibility:** root `build.gradle.kts` conditionally registers a no-op
+  `prepareKotlinBuildScriptModel` for projects missing it, satisfying IDE tooling that still asks for
+  that legacy Kotlin script model task under AGP 9 built-in Kotlin.
+
+- **[ROADMAP Phase 2 / Agent trust] Tool receipt MVP:** Expanded agent tool cards now show a visible
+  receipt with provider, timestamp, duration, target summary, and OK/FAILED status. This is the
+  first audit surface before persistent logs / approval gates.
+
+- **[ROADMAP Epic 1.2 / Epic 1.3]** **`ExplorerPinsStore`**: workspace-scoped **recents** + **starred favorites**
+  (`SharedPreferences`); explorer **STARRED** / **RECENT** lists + file context menu; **`IdeViewModel`**
+  path hygiene on rename/delete. **Split divider** **snap-to-preset** on drag end (30/50/70%). **Shortcuts:**
+  Ctrl+S, Ctrl+Shift+S, Ctrl+W (palette / API-keys dialog suppresses).
+
+- **[ROADMAP Phase 2 / Agent V2] Runtime API key input:** AI Architect now has an **API keys**
+  dialog (key icon + command palette command) for Anthropic and Gemini keys stored on-device in
+  `LlmProviderStore` SharedPreferences. `AnthropicClientImpl` / `GeminiClientImpl` prefer runtime
+  keys and keep `local.properties` / `BuildConfig` keys as fallback. Agent status shows **NEEDS KEY**
+  when the selected provider has no runtime key.
+
+- **[ROADMAP Epic 1.3 / Epic 2.2]** Tablet UX: **command palette** (`IdeCommandPalette.kt`) —
+  Search rail + **Ctrl+P / ⌘P** (hardware keyboard), fuzzy filter, shortcuts for workspace, explorer
+  focus, save/save all, undo/redo, clear agent chat, **editor/agent split presets** (70/30 · 50/50 ·
+  30/70), Execute stub. **Draggable split** between editor stack and AI panel (`EditorAgentSplitDivider.kt`,
+  fraction persisted with `rememberSaveable`). Agent **expandable tool** rows: **Copy JSON** copies tool
+  request payload to clipboard (`AgentChatPanel`). Nav rail **Search** opens palette only (no snackbar stub).
+
 - Root **`build.bat`**: runs `gradlew :app:assembleDebug` and copies the APK to **`BUILT\`**; optional argument **`release`** runs `assembleRelease` (add a `signingConfig` if AGP requires it). **`BUILT/`** in `.gitignore`.
 
 - **[ROADMAP Epic 1.2 / Epic 2.2–2.3] Explorer + agent UX:** File tree **filter** (`TreeFilter.kt` —

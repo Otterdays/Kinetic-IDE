@@ -53,7 +53,8 @@ fun KineticNavRail(
     section: RailSection,
     onSection: (RailSection) -> Unit,
     onOpenWorkspace: () -> Unit,
-    onSearchStub: () -> Unit,
+    /** Command palette / quick search — does not switch rail section */
+    onSearch: () -> Unit,
     onExtensionsStub: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -92,14 +93,11 @@ fun KineticNavRail(
             colors = railItemColors(section == RailSection.Explorer),
         )
         NavigationRailItem(
-            selected = section == RailSection.Search,
-            onClick = {
-                onSection(RailSection.Search)
-                onSearchStub()
-            },
+            selected = false,
+            onClick = onSearch,
             icon = { Icon(Icons.Default.Search, null) },
             label = { RailLabel("Search") },
-            colors = railItemColors(section == RailSection.Search),
+            colors = railItemColors(false),
         )
         NavigationRailItem(
             selected = section == RailSection.Extensions,

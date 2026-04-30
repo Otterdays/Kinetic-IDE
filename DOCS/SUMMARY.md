@@ -65,4 +65,14 @@
 
 *[2026-04-30]: [AMENDED] Ship: explorer tree filter + extension icons; agent expandable tool cards; per-send workspace context (tabs + selection) in system prompt.*
 
-*[2026-04-30]: [AMENDED] Multi-provider LLM: `LlmClient` interface, `GeminiClientImpl`, `LlmProviderStore`, provider picker in AI Architect panel. `ToolRouter` 3→8 tools (`edit_file`, `search_files`, `create_directory`, `delete_path`, `rename_path`). `SYSTEM_PROMPT` enumerates all tools. Add `geminiApiKey` to `local.properties` to enable Gemini.*
+*[2026-04-30]: [AMENDED] Epic 1.2 explorer **recents + starred favorites** (`ExplorerPinsStore`, `FileTreePane`); Epic 1.3 **divider snap** + **Ctrl+S / Ctrl+Shift+S / Ctrl+W**.*
+
+*[2026-04-30]: [AMENDED] Epic 1.3 MVP: command palette (Search rail + Ctrl/⌘P), draggable editor/agent split + palette presets, tool-row Copy JSON. See `DOCS/ROADMAP.md` Epic 1.3.*
+
+*[2026-04-30]: [AMENDED] Runtime API key input: AI Architect key dialog + command palette action save Anthropic/Gemini keys on-device; clients prefer runtime keys and keep `local.properties` / `BuildConfig` fallback.*
+
+*[2026-04-30]: [AMENDED] Agent trust: expanded tool cards now include visible operation receipts (provider, time, duration, target, OK/FAILED status); persistent audit log remains roadmap work.*
+
+*[2026-04-30]: [AMENDED] Explorer **`filteredTree`** + lazy pin **content types**; agent tool **`ToolMutationAction`** (Revert / Apply again) for **`write_file`** / **`edit_file`**.**
+
+*[2026-04-30]: [AMENDED] Gradle IDE sync compatibility: root `build.gradle.kts` adds conditional no-op `prepareKotlinBuildScriptModel` for tooling that requests the legacy task under AGP 9 built-in Kotlin.*

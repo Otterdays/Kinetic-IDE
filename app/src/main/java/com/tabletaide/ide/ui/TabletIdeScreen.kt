@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -25,28 +27,50 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.tabletaide.ide.data.LlmCredentialState
+import com.tabletaide.ide.data.LlmProvider
 import kotlinx.coroutines.launch
+
+private fun clampEditorAgentFraction(value: Float): Float = value.coerceIn(0.22f, 0.82f)
+
+/** Snap editor fraction toward palette presets when drag ends ([TRACE: DOCS/ROADMAP.md] Epic 1.3). */
+private fun snapEditorAgentFraction(value: Float): Float {
+    val c = clampEditorAgentFraction(value)
+    val presets = listOf(0.3f, 0.5f, 0.7f)
+    val nearest = presets.minByOrNull { kotlin.math.abs(it - c) } ?: return c
+    return if (kotlin.math.abs(nearest - c) <= 0.11f) nearest else c
+}
 
 @Composable
 fun TabletIdeScreen(
     ideVm: IdeViewModel = hiltViewModel(),
     agentVm: AgentViewModel = hiltViewModel(),
 ) {
-    val tree by ideVm.tree.collectAsState()
+    val filteredTree by ideVm.filteredTree.collectAsState()
+    val explorerTreeFilterQuery by ideVm.explorerTreeFilterQuery.collectAsState()
     val tabs by ideVm.tabs.collectAsState()
     val selectedTabIndex by ideVm.selectedTabIndex.collectAsState()
     val railSection by ideVm.railSection.collectAsState()
@@ -64,6 +88,10 @@ fun TabletIdeScreen(
     val busy by agentVm.busy.collectAsState()
     val agentError by agentVm.error.collectAsState()
     val provider by agentVm.provider.collectAsState()
+    val credentials by agentVm.credentials.collectAsState()
+
+    val explorerRecentsList by ideVm.explorerRecents.collectAsState()
+    val explorerFavoritesList by ideVm.explorerFavorites.collectAsState()
 
     val activeTab = tabs.getOrNull(selectedTabIndex)
     val activePath = activeTab?.path
@@ -83,6 +111,10 @@ fun TabletIdeScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var dirtyCloseTabIndex by remember { mutableStateOf<Int?>(null) }
+    var commandPaletteVisible by remember { mutableStateOf(false) }
+    var commandPaletteQuery by remember { mutableStateOf("") }
+    var apiKeysDialogVisible by remember { mutableStateOf(false) }
+    var editorAgentFraction by rememberSaveable { mutableFloatStateOf(0.65f) }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -113,6 +145,109 @@ fun TabletIdeScreen(
             addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
         }
         openTreeLauncher.launch(intent)
+    }
+
+    val paletteCommands = remember(
+        tabs.size,
+        tabs.count { it.dirty },
+        undoRedoEpoch,
+        selectedTabIndex,
+        busy,
+        activePath,
+    ) {
+        listOf(
+            PaletteCommand(
+                title = "Open workspace",
+                subtitle = "Pick a folder (SAF)",
+                keywords = listOf("open", "folder", "saf", "project"),
+                onInvoke = { openFolder() },
+            ),
+            PaletteCommand(
+                title = "Focus explorer",
+                subtitle = "Show file tree",
+                keywords = listOf("explorer", "tree", "sidebar"),
+                onInvoke = { ideVm.setRailSection(RailSection.Explorer) },
+            ),
+            PaletteCommand(
+                title = "Save",
+                subtitle = "Active tab",
+                keywords = listOf("save"),
+                enabled = tabs.isNotEmpty(),
+                onInvoke = { ideVm.saveCurrentFile() },
+            ),
+            PaletteCommand(
+                title = "Save all",
+                subtitle = "All dirty tabs",
+                keywords = listOf("save", "all"),
+                enabled = tabs.any { it.dirty },
+                onInvoke = { ideVm.saveAllDirtyTabs() },
+            ),
+            PaletteCommand(
+                title = "Undo",
+                subtitle = "Active buffer",
+                keywords = listOf("undo"),
+                enabled = canUndoNow,
+                onInvoke = { ideVm.undo() },
+            ),
+            PaletteCommand(
+                title = "Redo",
+                subtitle = "Active buffer",
+                keywords = listOf("redo"),
+                enabled = canRedoNow,
+                onInvoke = { ideVm.redo() },
+            ),
+            PaletteCommand(
+                title = "Toggle favorite (active file)",
+                subtitle = activePath?.substringAfterLast('/') ?: "No file open",
+                keywords = listOf("star", "favorite", "favourite", "pin"),
+                enabled = tabs.isNotEmpty(),
+                onInvoke = { ideVm.toggleFavoriteActiveTab() },
+            ),
+            PaletteCommand(
+                title = "API keys",
+                subtitle = "Configure Anthropic and Gemini on device",
+                keywords = listOf("api", "key", "keys", "llm", "provider", "ai"),
+                enabled = !busy,
+                onInvoke = { apiKeysDialogVisible = true },
+            ),
+            PaletteCommand(
+                title = "Clear agent chat",
+                subtitle = "Reset AI Architect conversation",
+                keywords = listOf("clear", "chat", "agent", "ai"),
+                enabled = !busy,
+                onInvoke = { agentVm.clearConversation() },
+            ),
+            PaletteCommand(
+                title = "Layout: editor 70% · agent 30%",
+                subtitle = "Split preset",
+                keywords = listOf("layout", "split", "70", "agent", "panel"),
+                onInvoke = { editorAgentFraction = clampEditorAgentFraction(0.7f) },
+            ),
+            PaletteCommand(
+                title = "Layout: editor 50% · agent 50%",
+                subtitle = "Split preset",
+                keywords = listOf("layout", "split", "50", "equal"),
+                onInvoke = { editorAgentFraction = clampEditorAgentFraction(0.5f) },
+            ),
+            PaletteCommand(
+                title = "Layout: editor 30% · agent 70%",
+                subtitle = "Split preset",
+                keywords = listOf("layout", "split", "30", "wide", "chat"),
+                onInvoke = { editorAgentFraction = clampEditorAgentFraction(0.3f) },
+            ),
+            PaletteCommand(
+                title = "Execute / Run",
+                subtitle = "Stub — Termux later",
+                keywords = listOf("run", "execute", "debug", "play"),
+                onInvoke = {
+                    scope.launch {
+                        snackbar.showSnackbar(
+                            "Execute — connect Termux or a runner in a later phase",
+                        )
+                    }
+                },
+            ),
+        )
     }
 
     LaunchedEffect(status) {
@@ -163,30 +298,64 @@ fun TabletIdeScreen(
         )
     }
 
+    if (apiKeysDialogVisible) {
+        ApiKeysDialog(
+            credentials = credentials,
+            onDismiss = { apiKeysDialogVisible = false },
+            onSave = { targetProvider, apiKey ->
+                agentVm.setApiKey(targetProvider, apiKey)
+                scope.launch { snackbar.showSnackbar("${targetProvider.displayName} API key saved") }
+            },
+        )
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(MaterialTheme.colorScheme.background)
+            .onPreviewKeyEvent { e ->
+                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (commandPaletteVisible || apiKeysDialogVisible) return@onPreviewKeyEvent false
+                when {
+                    e.key == Key.P && e.isCtrlPressed -> {
+                        commandPaletteVisible = true
+                        true
+                    }
+                    e.key == Key.S && e.isCtrlPressed -> {
+                        if (e.isShiftPressed) ideVm.saveAllDirtyTabs() else ideVm.saveCurrentFile()
+                        true
+                    }
+                    e.key == Key.W && e.isCtrlPressed -> {
+                        if (tabs.isNotEmpty()) requestCloseTab(selectedTabIndex)
+                        true
+                    }
+                    else -> false
+                }
+            },
     ) {
         Row(Modifier.fillMaxSize()) {
             KineticNavRail(
                 section = railSection,
                 onSection = ideVm::setRailSection,
                 onOpenWorkspace = { openFolder() },
-                onSearchStub = {
-                    scope.launch { snackbar.showSnackbar("Search — coming soon") }
-                },
+                onSearch = { commandPaletteVisible = true },
                 onExtensionsStub = {
                     scope.launch { snackbar.showSnackbar("Extensions — coming soon") }
                 },
             )
             if (railSection != RailSection.Search && railSection != RailSection.Extensions) {
                 FileTreePane(
-                    rows = tree,
+                    rows = filteredTree,
+                    treeFilterQuery = explorerTreeFilterQuery,
+                    onTreeFilterQueryChange = ideVm::setExplorerTreeFilterQuery,
                     selectedPath = activePath,
+                    favoritePaths = explorerFavoritesList,
+                    recentPaths = explorerRecentsList,
                     hasWorkspaceRoot = ideVm.hasWorkspaceRoot(),
                     onOpenWorkspace = { openFolder() },
                     onSelectFile = ideVm::openOrSelectFile,
+                    onOpenPinnedPath = ideVm::openExplorerPinnedPath,
+                    onToggleFavoritePath = ideVm::toggleExplorerFavorite,
                     onCreateFile = ideVm::explorerCreateEmptyFile,
                     onCreateFolderRelative = ideVm::explorerCreateFolder,
                     onRename = ideVm::explorerRename,
@@ -221,50 +390,74 @@ fun TabletIdeScreen(
                     },
                     agentBusy = busy,
                 )
-                Row(
+                BoxWithConstraints(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                    ) {
-                        BreadcrumbBar(activePath)
-                        CodeEditorPane(
-                            value = editorField,
-                            onValueChange = { tv ->
-                                ideVm.onEditorValueChange(tv.text, tv.selection.start, tv.selection.end)
+                    val totalPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
+                    val editorW = clampEditorAgentFraction(editorAgentFraction)
+                    Row(Modifier.fillMaxSize()) {
+                        Column(
+                            modifier = Modifier
+                                .weight(editorW)
+                                .fillMaxHeight(),
+                        ) {
+                            BreadcrumbBar(activePath)
+                            CodeEditorPane(
+                                value = editorField,
+                                onValueChange = { tv ->
+                                    ideVm.onEditorValueChange(
+                                        tv.text,
+                                        tv.selection.start,
+                                        tv.selection.end,
+                                    )
+                                },
+                                tabPath = activePath,
+                                scrollInitialPx = activeTab?.scrollPx ?: 0,
+                                onScrollPxCommitted = { path, px ->
+                                    ideVm.reportEditorScroll(path, px)
+                                },
+                                enabled = tabs.isNotEmpty(),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
+                            )
+                            TerminalPanel(
+                                modifier = Modifier
+                                    .height(192.dp)
+                                    .fillMaxWidth(),
+                            )
+                        }
+                        EditorAgentSplitDivider(
+                            totalWidthPx = totalPx,
+                            onDragFractionDelta = { delta ->
+                                editorAgentFraction =
+                                    clampEditorAgentFraction(editorAgentFraction + delta)
                             },
-                            tabPath = activePath,
-                            scrollInitialPx = activeTab?.scrollPx ?: 0,
-                            onScrollPxCommitted = { path, px -> ideVm.reportEditorScroll(path, px) },
-                            enabled = tabs.isNotEmpty(),
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth(),
+                            onDragEnd = {
+                                editorAgentFraction = snapEditorAgentFraction(editorAgentFraction)
+                            },
                         )
-                        TerminalPanel(
+                        AgentChatPanel(
+                            lines = chatLines,
+                            busy = busy,
+                            error = agentError,
+                            currentProvider = provider,
+                            credentials = credentials,
+                            onSend = { msg ->
+                                agentVm.sendUserMessage(msg, ideVm.buildAgentWorkspaceContext())
+                            },
+                            onClear = agentVm::clearConversation,
+                            onProviderChange = agentVm::setProvider,
+                            onOpenApiKeys = { apiKeysDialogVisible = true },
+                            onRevertToolMutation = agentVm::revertToolMutation,
+                            onApplyToolMutation = agentVm::applyToolMutation,
                             modifier = Modifier
-                                .height(192.dp)
-                                .fillMaxWidth(),
+                                .weight(1f - editorW)
+                                .fillMaxHeight(),
                         )
                     }
-                    AgentChatPanel(
-                        lines = chatLines,
-                        busy = busy,
-                        error = agentError,
-                        currentProvider = provider,
-                        onSend = { msg ->
-                            agentVm.sendUserMessage(msg, ideVm.buildAgentWorkspaceContext())
-                        },
-                        onClear = agentVm::clearConversation,
-                        onProviderChange = agentVm::setProvider,
-                        modifier = Modifier
-                            .width(300.dp)
-                            .fillMaxHeight(),
-                    )
                 }
                 KineticStatusBar(
                     activePath = activePath,
@@ -278,5 +471,76 @@ fun TabletIdeScreen(
                 .align(Alignment.BottomCenter)
                 .padding(48.dp),
         )
+        IdeCommandPalette(
+            visible = commandPaletteVisible,
+            query = commandPaletteQuery,
+            onQueryChange = { commandPaletteQuery = it },
+            commands = paletteCommands,
+            onDismiss = {
+                commandPaletteVisible = false
+                commandPaletteQuery = ""
+            },
+        )
     }
+}
+
+@Composable
+private fun ApiKeysDialog(
+    credentials: LlmCredentialState,
+    onDismiss: () -> Unit,
+    onSave: (LlmProvider, String) -> Unit,
+) {
+    var anthropicKey by remember(credentials.anthropicApiKey) {
+        mutableStateOf(credentials.anthropicApiKey)
+    }
+    var geminiKey by remember(credentials.geminiApiKey) {
+        mutableStateOf(credentials.geminiApiKey)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("API keys") },
+        text = {
+            Column {
+                Text(
+                    "Keys are saved on this device and used immediately. Build-time local.properties keys still work as fallback.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = anthropicKey,
+                    onValueChange = { anthropicKey = it },
+                    label = { Text("Anthropic API key") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 14.dp),
+                )
+                OutlinedTextField(
+                    value = geminiKey,
+                    onValueChange = { geminiKey = it },
+                    label = { Text("Gemini API key") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp),
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onSave(LlmProvider.ANTHROPIC, anthropicKey)
+                    onSave(LlmProvider.GEMINI, geminiKey)
+                    onDismiss()
+                },
+            ) {
+                Text("Save")
+            }
+        },
+    )
 }

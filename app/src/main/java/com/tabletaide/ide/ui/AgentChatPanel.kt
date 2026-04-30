@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -25,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -34,12 +36,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tabletaide.ide.data.LlmCredentialState
 import com.tabletaide.ide.data.LlmProvider
 import com.tabletaide.ide.ui.theme.KineticColors
 
@@ -49,13 +54,19 @@ fun AgentChatPanel(
     busy: Boolean,
     error: String?,
     currentProvider: LlmProvider,
+    credentials: LlmCredentialState,
     onSend: (String) -> Unit,
     onClear: () -> Unit,
     onProviderChange: (LlmProvider) -> Unit,
+    onOpenApiKeys: () -> Unit,
+    /** Workspace-relative revert for captured write/edit tool rows ([TRACE: DOCS/ROADMAP.md] Epic 2.2). */
+    onRevertToolMutation: (String) -> Unit,
+    onApplyToolMutation: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var draft by remember { mutableStateOf("") }
     var providerMenuOpen by remember { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
     Column(
         modifier = modifier
             .fillMaxHeight()
@@ -112,8 +123,13 @@ fun AgentChatPanel(
                     }
                 }
             }
-            IconButton(onClick = onClear, enabled = !busy) {
-                Icon(Icons.Default.Clear, contentDescription = "Clear", tint = KineticColors.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onOpenApiKeys, enabled = !busy) {
+                    Icon(Icons.Default.Key, contentDescription = "API keys", tint = KineticColors.onSurfaceVariant)
+                }
+                IconButton(onClick = onClear, enabled = !busy) {
+                    Icon(Icons.Default.Clear, contentDescription = "Clear", tint = KineticColors.onSurfaceVariant)
+                }
             }
         }
         Column(
@@ -137,7 +153,11 @@ fun AgentChatPanel(
                     color = KineticColors.outline,
                 )
                 Text(
-                    if (busy) "WORKING" else "READY",
+                    when {
+                        busy -> "WORKING"
+                        credentials.hasKey(currentProvider) -> "READY"
+                        else -> "NEEDS KEY"
+                    },
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     color = KineticColors.primary,
@@ -206,20 +226,29 @@ fun AgentChatPanel(
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(KineticColors.primary.copy(alpha = 0.08f))
-                                .border(1.dp, KineticColors.primary.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
-                                .clickable { expanded = !expanded }
+                                .border(
+                                    1.dp,
+                                    KineticColors.primary.copy(alpha = 0.25f),
+                                    RoundedCornerShape(12.dp),
+                                )
                                 .padding(12.dp),
                         ) {
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { expanded = !expanded },
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
-                                    "TOOL · ${line.name}",
+                                    "TOOL · ${line.name} · ${line.receipt.status}",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = KineticColors.primary,
+                                    color = if (line.receipt.status == "OK") {
+                                        KineticColors.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.error
+                                    },
                                 )
                                 Text(
                                     if (expanded) "▼" else "▶",
@@ -231,16 +260,77 @@ fun AgentChatPanel(
                                 text = if (expanded) line.resultFull else line.preview,
                                 fontSize = 11.sp,
                                 color = KineticColors.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 6.dp),
+                                modifier = Modifier
+                                    .padding(top = 6.dp)
+                                    .clickable { expanded = true },
                             )
                             if (expanded) {
-                                Text(
-                                    "Request (JSON)",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = KineticColors.outline,
-                                    modifier = Modifier.padding(top = 10.dp),
-                                )
+                                ToolReceiptView(line.receipt)
+                                val mut = line.mutation
+                                if (mut != null && line.receipt.status == "OK") {
+                                    when (mut.phase) {
+                                        AgentViewModel.ToolMutationPhase.APPLIED_ON_DISK -> {
+                                            Row(
+                                                modifier = Modifier.padding(top = 8.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            ) {
+                                                TextButton(
+                                                    onClick = { onRevertToolMutation(line.id) },
+                                                    enabled = !busy,
+                                                ) {
+                                                    Text("Revert file", fontSize = 11.sp)
+                                                }
+                                            }
+                                        }
+                                        AgentViewModel.ToolMutationPhase.REVERTED -> {
+                                            Row(
+                                                modifier = Modifier.padding(top = 8.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            ) {
+                                                TextButton(
+                                                    onClick = { onApplyToolMutation(line.id) },
+                                                    enabled = !busy,
+                                                ) {
+                                                    Text("Apply again", fontSize = 11.sp)
+                                                }
+                                            }
+                                        }
+                                        AgentViewModel.ToolMutationPhase.CONFLICT -> {
+                                            Text(
+                                                mut.conflictDetail ?: "Conflict",
+                                                color = MaterialTheme.colorScheme.error,
+                                                fontSize = 11.sp,
+                                                modifier = Modifier.padding(top = 8.dp),
+                                            )
+                                        }
+                                    }
+                                }
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        "Request (JSON)",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = KineticColors.outline,
+                                    )
+                                    TextButton(
+                                        onClick = {
+                                            clipboard.setText(AnnotatedString(line.inputJson))
+                                        },
+                                        modifier = Modifier.height(28.dp),
+                                    ) {
+                                        Text(
+                                            "Copy JSON",
+                                            fontSize = 10.sp,
+                                            color = KineticColors.primary,
+                                        )
+                                    }
+                                }
                                 Text(
                                     line.inputJson,
                                     fontSize = 10.sp,
@@ -303,6 +393,39 @@ fun AgentChatPanel(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ToolReceiptView(receipt: AgentViewModel.ToolReceipt) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(KineticColors.surfaceContainerHighest.copy(alpha = 0.45f))
+            .border(1.dp, KineticColors.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+            .padding(10.dp),
+    ) {
+        Text(
+            "RECEIPT",
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.8.sp,
+            color = KineticColors.outline,
+        )
+        Text(
+            "${receipt.startedAt} · ${receipt.durationMs}ms · ${receipt.providerName}",
+            fontSize = 10.sp,
+            color = KineticColors.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        Text(
+            "${receipt.toolName} → ${receipt.target}",
+            fontSize = 11.sp,
+            color = KineticColors.onSurface,
+            modifier = Modifier.padding(top = 4.dp),
+        )
     }
 }
 

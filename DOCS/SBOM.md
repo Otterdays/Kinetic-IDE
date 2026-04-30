@@ -2,7 +2,7 @@
 
 # SBOM — Kinetic
 
-**Last updated:** 2026-03-29 ([AMENDED]: README/GitHub + `.vscode` JDK settings documented; no dependency version changes this pass). Prior: AGP built-in Kotlin — no `kotlin.android` plugin; Hilt 2.59.2 + KSP 2.3.6; Gradle wrapper 9.4.1; AGP 9.1.0; Kotlin 2.3.10 (Compose compiler plugin).
+**Last updated:** 2026-04-30 ([AMENDED]: Gradle IDE sync compatibility task added; no dependency version changes). Prior: Tool receipt MVP added with existing Kotlin/Compose APIs; Runtime API key input added with existing Android SharedPreferences; README/GitHub + `.vscode` JDK settings documented; AGP built-in Kotlin — no `kotlin.android` plugin; Hilt 2.59.2 + KSP 2.3.6; Gradle wrapper 9.4.1; AGP 9.1.0; Kotlin 2.3.10 (Compose compiler plugin).
 
 ## Application dependencies
 
@@ -47,3 +47,9 @@ _Not configured._
 *[2026-03-29]: [AMENDED] Maintenance blurb (where to edit when versions change).*
 
 *[2026-03-29]: [AMENDED] Header note — docs/README refresh; SBOM table unchanged.*
+
+*[2026-04-30]: [AMENDED] Runtime API key input uses existing Android SharedPreferences / Compose / Hilt stack; no packages added or removed.*
+
+*[2026-04-30]: [AMENDED] Tool receipt MVP uses existing Kotlin standard library time formatting and Compose UI; no packages added or removed.*
+
+*[2026-04-30]: [AMENDED] Gradle IDE sync compatibility task added in root `build.gradle.kts`; no packages or plugin versions changed.*

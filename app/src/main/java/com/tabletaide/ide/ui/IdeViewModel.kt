@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tabletaide.ide.data.EditorSessionStore
+import com.tabletaide.ide.data.ExplorerPinsStore
 import com.tabletaide.ide.data.PersistedEditorSnapshot
 import com.tabletaide.ide.data.PersistedTab
 import com.tabletaide.ide.data.TreeRow
@@ -51,8 +52,12 @@ class IdeViewModel @Inject constructor(
     private val workspace: WorkspaceRepository,
     mutationBus: WorkspaceMutationBus,
     private val sessionStore: EditorSessionStore,
+    private val explorerPins: ExplorerPinsStore,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
+
+    val explorerRecents: StateFlow<List<String>> = explorerPins.recents
+    val explorerFavorites: StateFlow<List<String>> = explorerPins.favorites
 
     private val _tabs = MutableStateFlow<List<EditorTab>>(emptyList())
     val tabs: StateFlow<List<EditorTab>> = _tabs.asStateFlow()
@@ -68,6 +73,13 @@ class IdeViewModel @Inject constructor(
 
     private val _tree = MutableStateFlow<List<TreeRow>>(emptyList())
     val tree: StateFlow<List<TreeRow>> = _tree.asStateFlow()
+
+    private val _explorerTreeFilterQuery = MutableStateFlow("")
+    val explorerTreeFilterQuery: StateFlow<String> = _explorerTreeFilterQuery.asStateFlow()
+
+    private val _filteredTree = MutableStateFlow<List<TreeRow>>(emptyList())
+    /** Explorer rows after `explorerTreeFilterQuery` ([TRACE: DOCS/ROADMAP.md] Epic 1.2 virtualization). */
+    val filteredTree: StateFlow<List<TreeRow>> = _filteredTree.asStateFlow()
 
     /** Bumps when undo stacks change without tab.content changing (Compose refresh). */
     private val _undoRedoEpoch = MutableStateFlow(0L)
@@ -101,6 +113,7 @@ class IdeViewModel @Inject constructor(
             }
         }
         tryRestorePersistedSession()
+        explorerPins.bindWorkspace(workspace.rootTreeUriOrNull())
     }
 
     fun hasWorkspaceRoot(): Boolean = workspace.hasRoot()
@@ -138,6 +151,15 @@ class IdeViewModel @Inject constructor(
 
     fun setRailSection(section: RailSection) {
         _railSection.value = section
+    }
+
+    fun setExplorerTreeFilterQuery(query: String) {
+        _explorerTreeFilterQuery.value = query
+        recomputeFilteredExplorerRows()
+    }
+
+    private fun recomputeFilteredExplorerRows() {
+        _filteredTree.value = filterTreeRows(_tree.value, _explorerTreeFilterQuery.value)
     }
 
     fun canUndo(): Boolean {
@@ -210,6 +232,7 @@ class IdeViewModel @Inject constructor(
         undoByPath.clear()
         redoByPath.clear()
         workspace.setRootFromUri(treeUri)
+        explorerPins.bindWorkspace(treeUri)
         refreshTree()
         _tabs.value = emptyList()
         _selectedTabIndex.value = 0
@@ -280,6 +303,7 @@ class IdeViewModel @Inject constructor(
 
     fun refreshTree() {
         _tree.value = workspace.listTreeRows()
+        recomputeFilteredExplorerRows()
     }
 
     private suspend fun openOrSelectRelativePath(path: String, displayNameFallback: String) {
@@ -304,6 +328,7 @@ class IdeViewModel @Inject constructor(
                 _tabs.update { it + editorTab }
                 _selectedTabIndex.value = _tabs.value.lastIndex
                 _status.value = null
+                explorerPins.recordFileOpened(path)
                 bumpUndoRedo()
                 persistDraftIfPossible()
             },
@@ -318,11 +343,29 @@ class IdeViewModel @Inject constructor(
         val existing = _tabs.value.indexOfFirst { it.path == row.path }
         if (existing >= 0) {
             selectTab(existing)
+            explorerPins.recordFileOpened(row.path)
             return
         }
         viewModelScope.launch {
             openOrSelectRelativePath(row.path, row.displayName)
         }
+    }
+
+    /** Open a workspace-relative file path from recents/favorites ([TRACE: DOCS/ROADMAP.md] Epic 1.2). */
+    fun openExplorerPinnedPath(path: String) {
+        viewModelScope.launch {
+            val name = path.substringAfterLast('/').ifBlank { path }
+            openOrSelectRelativePath(path.trim('/'), name)
+        }
+    }
+
+    fun toggleExplorerFavorite(path: String) {
+        explorerPins.toggleFavorite(path)
+    }
+
+    fun toggleFavoriteActiveTab() {
+        val path = _tabs.value.getOrNull(_selectedTabIndex.value)?.path ?: return
+        explorerPins.toggleFavorite(path)
     }
 
     fun selectTab(index: Int) {
@@ -474,6 +517,7 @@ class IdeViewModel @Inject constructor(
                     }
                     refreshTree()
                     persistDraftIfPossible()
+                    explorerPins.renameTrackedPath(oldPath, newRel)
                     _status.value = "Renamed to $nm"
                 },
                 onFailure = { _status.value = it.message },
@@ -506,6 +550,7 @@ class IdeViewModel @Inject constructor(
                     }
                     refreshTree()
                     persistDraftIfPossible()
+                    explorerPins.removeTrackedPath(row.path, row.isDirectory)
                     _status.value = "Deleted ${row.displayName}"
                 },
                 onFailure = { _status.value = it.message },

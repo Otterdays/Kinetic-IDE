@@ -44,7 +44,7 @@ Roadmap: LSP, richer diagnostics, git, Rust/NDK core — see [`claude_ide_recomm
 ```bash
 # 1. Secrets & SDK path
 cp local.properties.example local.properties   # or copy manually on Windows
-# Edit local.properties: sdk.dir=..., anthropicApiKey=... (optional)
+# Edit local.properties: sdk.dir=...; API keys can also be added inside the app.
 
 # 2. Debug APK
 ./gradlew :app:assembleDebug

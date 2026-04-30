@@ -9,8 +9,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -25,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -37,10 +43,16 @@ import com.tabletaide.ide.ui.theme.KineticColors
 @Composable
 fun FileTreePane(
     rows: List<TreeRow>,
+    treeFilterQuery: String,
+    onTreeFilterQueryChange: (String) -> Unit,
     selectedPath: String?,
+    favoritePaths: List<String>,
+    recentPaths: List<String>,
     hasWorkspaceRoot: Boolean,
     onOpenWorkspace: () -> Unit,
     onSelectFile: (TreeRow) -> Unit,
+    onOpenPinnedPath: (String) -> Unit,
+    onToggleFavoritePath: (String) -> Unit,
     onCreateFile: (parentDirRelativeOrEmpty: String, leafName: String) -> Unit,
     onCreateFolderRelative: (relativeFolderPathTrimmed: String) -> Unit,
     onRename: (TreeRow, newLeafName: String) -> Unit,
@@ -53,8 +65,12 @@ fun FileTreePane(
     var renameDraft by remember { mutableStateOf("") }
     var deleteTarget by remember { mutableStateOf<TreeRow?>(null) }
     var createFileParent by remember { mutableStateOf<String?>(null) }
-    var treeFilterQuery by remember { mutableStateOf("") }
-    val displayedRows = remember(rows, treeFilterQuery) { filterTreeRows(rows, treeFilterQuery) }
+
+    val favShown = remember(favoritePaths) { favoritePaths.take(12) }
+    val favSet = remember(favoritePaths) { favoritePaths.toSet() }
+    val recentShown = remember(recentPaths, favSet) {
+        recentPaths.asSequence().filterNot { it in favSet }.take(14).toList()
+    }
 
     /** Parent directory relative path trimmed, or blank for root (`null` means no dialog showing). */
     var newFolderParent by remember { mutableStateOf<String?>(null) }
@@ -190,7 +206,7 @@ fun FileTreePane(
         )
         OutlinedTextField(
             value = treeFilterQuery,
-            onValueChange = { treeFilterQuery = it },
+            onValueChange = onTreeFilterQueryChange,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 10.dp, vertical = 2.dp),
@@ -227,7 +243,67 @@ fun FileTreePane(
                 .weight(1f)
                 .fillMaxWidth(),
         ) {
-            items(displayedRows, key = { it.path }) { row ->
+            if (hasWorkspaceRoot && favShown.isNotEmpty()) {
+                item(key = "hdr_starred", contentType = "pin_header") {
+                    Text(
+                        text = "STARRED",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 1.sp,
+                        color = KineticColors.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
+                    )
+                }
+                items(
+                    items = favShown,
+                    key = { "fav:$it" },
+                    contentType = { "pin_row" },
+                ) { path ->
+                    PinPathRow(
+                        path = path,
+                        selected = path == selectedPath,
+                        icon = Icons.Default.Star,
+                        onOpen = { onOpenPinnedPath(path) },
+                    )
+                }
+            }
+            if (hasWorkspaceRoot && recentShown.isNotEmpty()) {
+                item(key = "hdr_recent", contentType = "pin_header") {
+                    Text(
+                        text = "RECENT",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 1.sp,
+                        color = KineticColors.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
+                    )
+                }
+                items(
+                    items = recentShown,
+                    key = { "rec:$it" },
+                    contentType = { "pin_row" },
+                ) { path ->
+                    PinPathRow(
+                        path = path,
+                        selected = path == selectedPath,
+                        icon = Icons.Default.History,
+                        onOpen = { onOpenPinnedPath(path) },
+                    )
+                }
+            }
+            if (hasWorkspaceRoot && (favShown.isNotEmpty() || recentShown.isNotEmpty())) {
+                item(key = "pins_divider", contentType = "pin_divider") {
+                    HorizontalDivider(
+                        Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                    )
+                }
+            }
+            items(
+                items = rows,
+                key = { it.path },
+                contentType = { "tree_row" },
+            ) { row ->
                 val menuOpen = menuRow?.path == row.path
                 Box(Modifier.fillMaxWidth()) {
                     Row(
@@ -285,6 +361,16 @@ fun FileTreePane(
                             )
                         }
                         if (!row.isDirectory) {
+                            val isFav = favoritePaths.contains(row.path)
+                            DropdownMenuItem(
+                                text = {
+                                    Text(if (isFav) "Remove favorite" else "Add favorite")
+                                },
+                                onClick = {
+                                    menuRow = null
+                                    onToggleFavoritePath(row.path)
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text("Rename") },
                                 onClick = {
@@ -312,5 +398,37 @@ fun FileTreePane(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun PinPathRow(
+    path: String,
+    selected: Boolean,
+    icon: ImageVector,
+    onOpen: () -> Unit,
+) {
+    val label = path.substringAfterLast('/').ifBlank { path }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpen)
+            .padding(start = 14.dp, top = 3.dp, bottom = 3.dp, end = 10.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = if (selected) KineticColors.primary
+            else KineticColors.onSurfaceVariant.copy(alpha = 0.85f),
+        )
+        Text(
+            text = label,
+            color = if (selected) KineticColors.primary else MaterialTheme.colorScheme.onSurface,
+            fontSize = 12.sp,
+            maxLines = 1,
+            modifier = Modifier.padding(start = 8.dp),
+        )
     }
 }

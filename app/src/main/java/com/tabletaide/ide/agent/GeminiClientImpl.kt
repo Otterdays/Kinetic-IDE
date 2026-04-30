@@ -1,6 +1,7 @@
 package com.tabletaide.ide.agent
 
 import com.tabletaide.ide.BuildConfig
+import com.tabletaide.ide.data.LlmProviderStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
@@ -17,6 +18,7 @@ import javax.inject.Singleton
 @Singleton
 class GeminiClientImpl @Inject constructor(
     private val httpClient: OkHttpClient,
+    private val providerStore: LlmProviderStore,
 ) : LlmClient {
 
     override fun streamMessage(
@@ -26,9 +28,11 @@ class GeminiClientImpl @Inject constructor(
         tools: JSONArray?,
         maxTokens: Int,
     ): Flow<StreamEvent> = channelFlow {
-        val key = BuildConfig.GEMINI_API_KEY
+        val key = providerStore.getCredentialState().geminiApiKey.ifBlank {
+            BuildConfig.GEMINI_API_KEY
+        }
         if (key.isBlank()) {
-            send(StreamEvent.Failure("Missing Gemini API key. Set geminiApiKey in local.properties."))
+            send(StreamEvent.Failure("Missing Gemini API key. Add one from AI Architect > API keys."))
             send(StreamEvent.Finished)
             return@channelFlow
         }

@@ -2,6 +2,62 @@
 
 # SCRATCHPAD — Kinetic
 
+## Session checkpoint — 2026-04-30 (explorer filteredTree + agent apply/revert)
+
+- **Done:** **`IdeViewModel`**: `explorerTreeFilterQuery`, `setExplorerTreeFilterQuery`, **`filteredTree`**
+  recomputed in `refreshTree`. **`FileTreePane`**: filter wired from VM; STARRED / RECENT / divider / tree as
+  separate **`LazyColumn`** items with **`contentType`**. **`AgentViewModel`**: pre/post disk snapshots for
+  **`write_file`** / **`edit_file`**; **`revertToolMutation`** / **`applyToolMutation`**; **`ToolMutationPhase`**
+  (**APPLIED_ON_DISK**, **REVERTED**, **CONFLICT**). **`AgentChatPanel`**: **Revert file** / **Apply again** when expanded.
+  **`TabletIdeScreen`** passes filtered rows + mutation callbacks. `:app:compileDebugKotlin` OK. ROADMAP/CHANGELOG/SUMMARY amended.
+- **Next:** Incremental SAF tree listing; dirty-tab coordination for revert; markdown in chat.
+
+## Session checkpoint — 2026-04-30 (Gradle IDE sync compatibility)
+
+- **Issue:** IDE Gradle sync requested `:app:prepareKotlinBuildScriptModel`, but AGP 9 built-in
+  Kotlin does not guarantee that legacy Kotlin script model task exists on every project.
+- **Fix:** Root `build.gradle.kts` conditionally registers a no-op `prepareKotlinBuildScriptModel`
+  only on projects missing it, preserving AGP built-in Kotlin and avoiding `org.jetbrains.kotlin.android`.
+  Verified `.\gradlew.bat :app:prepareKotlinBuildScriptModel :app:compileDebugKotlin` **BUILD SUCCESSFUL**.
+
+## Session checkpoint — 2026-04-30 (tool receipt MVP)
+
+- **Done:** Phase 2 trust slice: agent tool cards now carry visible receipts from `AgentViewModel`
+  (`ToolReceipt`) into `AgentChatPanel`: provider, clock time, duration, target summary, and
+  OK/FAILED status. `DOCS/ROADMAP.md` marks operation receipts as partial (persistent audit log
+  still pending). CHANGELOG updated.
+- **Next:** Persist receipts across sessions and add approval gates / dry-run policies for destructive tools.
+
+## Session checkpoint — 2026-04-30 (runtime API keys)
+
+- **Done:** API keys are now part of the app flow, not just build setup. `LlmProviderStore` stores
+  Anthropic/Gemini runtime keys in SharedPreferences; `AgentViewModel` exposes credential state;
+  `AnthropicClientImpl` / `GeminiClientImpl` prefer runtime keys with `BuildConfig` fallback.
+  `AgentChatPanel` adds a key action and **NEEDS KEY** status; command palette opens the same
+  `ApiKeysDialog`. `local.properties.example`, README, CHANGELOG updated.
+- **Next:** Consider masking/toggle visibility and Android Keystore-backed encryption before public beta.
+
+## Session checkpoint — 2026-04-30 (Epic 1.2 pins + 1.3 snap / shortcuts)
+
+- **Done:** **`ExplorerPinsStore`** (`ExplorerPinsStore.kt`): per-workspace SharedPreferences **recents** (opened files,
+  capped) + **starred favorites**; bind on workspace open / restore; track opens on tab/file select;
+  rename/delete/sync paths on explorer SAF rename/delete. **`FileTreePane`**: STARRED + RECENT blocks above tree,
+  long-press **Add/remove favorite** on files. **`IdeViewModel`**: `openExplorerPinnedPath`, `toggleExplorerFavorite`,
+  `toggleFavoriteActiveTab`. **Split divider:** **snap on drag end** to nearest 30/50/70% preset within threshold
+  (`snapEditorAgentFraction`). **Shortcuts:** Ctrl+Shift+S save all, Ctrl+S save, Ctrl+W close tab (when palette/API
+  dialog closed); palette footer updated. `:app:compileDebugKotlin` OK.
+- **Next:** LazyColumn virtualization for huge trees; tab-cycle shortcuts; conflict prompts.
+
+## Session checkpoint — 2026-04-30 (Epic 1.3 UI: palette + split + tool copy)
+
+- **Done:** **Command palette** (`IdeCommandPalette.kt`): rail Search + Ctrl/⌘P, filter field,
+  actions (workspace, explorer focus, save/save all, undo/redo, clear chat, split presets, Execute stub).
+  **Editor/agent split:** draggable divider (`EditorAgentSplitDivider.kt`), fractional widths via
+  `rememberSaveable`, presets from palette. **Agent:** expanded tool row **Copy JSON** → clipboard.
+  Nav rail Search no longer toggles a stub snackbar / phantom rail section.
+  `:app:compileDebugKotlin` OK.
+- **Next:** Gesture snap on divider release; richer shortcuts; Epic 2.2 apply/revert for edits.
+
 ## Session checkpoint — 2026-04-30 (multi-provider LLM + tool router expansion)
 
 - **Done:**
@@ -119,7 +175,8 @@
 
 ## Last actions (most recent first)
 
-1. **2026-04-30:** Explorer filter + file-type icons; expandable agent tool cards + workspace context on send; ROADMAP/CHANGELOG/SCRATCHPAD.
+1. **2026-04-30:** `IdeViewModel.filteredTree` + lazy explorer pin rows; agent **`write_file`/`edit_file`** Revert/Apply + conflict state; ROADMAP/CHANGELOG/SUMMARY/SCRATCHPAD.
+2. **2026-04-30:** Explorer recents/favorites (`ExplorerPinsStore`), divider snap + Ctrl+S / Ctrl+Shift+S / Ctrl+W; ROADMAP/CHANGELOG/SUMMARY.
 2. **2026-03-29:** Rebrand **Kinetic**; `origin` → [Kinetic-IDE](https://github.com/Otterdays/Kinetic-IDE); push `main`.
 3. **2026-03-29:** README GitHub polish + DOCS sync; push `main`.
 4. **2026-03-29:** Gradle: `org.gradle.java.home` + `.vscode` Java home for Cursor/Red Hat JRE + `JdkImageTransform`.

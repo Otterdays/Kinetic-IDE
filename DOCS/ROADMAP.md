@@ -30,22 +30,22 @@ text box."
   - [x] Per-tab scroll + selection persisted (Compose + drafts)
   - [x] Dirty badges, close guards, Save all, crash-safe drafts + SAF restore
 - **Epic 1.2 — Workspace + SAF**
-  - [ ] Recursive tree virtualization (large dirs)
+  - [x] Recursive tree virtualization **[partial — `LazyColumn` STARRED/RECENT/tree items + content types; `IdeViewModel.filteredTree`; repository still materializes full tree — incremental subtree load `[ ]`]**
   - [x] File ops MVP: rename · duplicate · delete · new file / new folder (same-tree; cross-folder move still `[ ]`)
   - [x] Extension icons + grouping **[partial — icons by extension in explorer; grouped-by-type tree still `[ ]`]**
-  - [ ] Favorites / recents / pin
+  - [x] Favorites / recents / pin **[partial — starred list + MRU recents per workspace, explorer sections + menu + palette toggle active file; pin-to-top chrome still `[ ]`]**
   - [x] Fuzzy tree search **[MVP — explorer filter field, ordered-char fuzzy match + ancestor paths]**
 - **Epic 1.3 — Tablet UX**
-  - [ ] Split-pane gestures + snap presets
-  - [ ] External keyboard shortcuts
+  - [x] Split-pane + presets **[partial — draggable divider + snap-to-preset on drag end + palette fractions 70/30 · 50/50 · 30/70; fling snap gestures still `[ ]`]**
+  - [x] External keyboard shortcuts **[partial — Ctrl+P palette; Ctrl+S / Ctrl+Shift+S / Ctrl+W; full shortcut layer still `[ ]`]**
   - [ ] Stylus-friendly selection tuning
   - [ ] Theme modes (studio high-contrast)
-  - [ ] Command palette
+  - [x] Command palette **[partial — filtered palette + primary actions; not yet “all primary actions”]**
 
 ### Phase 2 — Agent V1 + developer trust *(partial MVP; see granular § below)*
 
 - **2.1** Tool router — **partial** (SAF tools through `rename_path`; trust/audit rows still `[ ]`).
-- **2.2** Agent UX — **partial** (streaming, tool rows, **expandable tool payloads**); revert / telemetry remain `[ ]`.
+- **2.2** Agent UX — **partial** (streaming, tool rows, expandable payloads, **apply/revert for write/edit**); telemetry remain `[ ]`.
 - **2.3** Prompt/context — **partial** (static prompt + per-send tab/selection appendix); templates / git / diagnostics remain `[ ]`.
 - *[AMENDED 2026-04-30]: Replaced “all `[ ]`” — granular truth lives in **Phase 2 · Tool router** + **Phase 2 · Agent UX & context**; narrative §Phase 2 epics below stay canonical for acceptance criteria.*
 
@@ -62,7 +62,7 @@ text box."
 ### Milestone checklist (granular)
 
 - [x] **M1:** undo/redo, autosave, dirty tabs, drafts + restore (+ large-file MVP, scroll/selection, file ops MVP)
-- [ ] **M2:** tree virtualization, favorites/recents, palette (remaining file ops polish tracked in Epic 1.2)
+- [ ] **M2:** tree virtualization **[partial — lazy item composition + `filteredTree`; incremental SAF listing still `[ ]`]** · favorites/recents **[partial — `ExplorerPinsStore` + explorer UI]** · palette **[palette MVP]**
 - [ ] **M3:** split polish, keyboard shortcuts, large-file polish
 - [ ] **M4–M11:** as in milestone map § below
 
@@ -79,7 +79,7 @@ text box."
   - [ ] **`run_command`** / Termux-host bridge **[ ]**
   - [ ] Path sandbox **`[partial]`** — workspace is SAF subtree only; no formal allow-list / escape tests **[ ]**
   - [ ] Dry-run for destructive ops **[ ]**
-  - [ ] Operation receipts + visible audit **[ ]**
+  - [x] Operation receipts + visible audit **[partial — expanded tool cards show provider, time, duration, target, status; persistent audit log still `[ ]`]**
   - [ ] Approval gates (**auto / ask / deny**) per tool class **[ ]**
 - **Epic 2.2 — Agent UX** — see **Phase 2 · Agent UX & context** for row-level status (partial vs backlog).
 - **Epic 2.3 — Prompt & context builder** — partial: `SYSTEM_PROMPT` + `IdeViewModel.buildAgentWorkspaceContext()` on each send (tabs/selection); templates/rules still `[ ]`.
@@ -94,7 +94,8 @@ text box."
   - [x] Busy / idle chrome + error surface in panel
   - [ ] Token-aware chunk rendering / rich markdown (beyond plain `Text`)
   - [x] Expandable tool cards (full **request JSON** + **full tool result** in panel; large results capped for UI)
-  - [ ] One-tap apply / revert / copy-patch for edits
+  - [x] Copy tool request JSON **[partial — clipboard from expanded row]**
+  - [x] One-tap apply / revert **[partial — `write_file` / `edit_file` tool rows: disk snapshot Revert / Apply again + conflict state; unified diff / copy-patch still `[ ]`]**
   - [ ] Session timeline with checkpoints and rollback points
   - [ ] Cost and token telemetry per conversation
 - **Epic 2.3 — Prompt & context**
@@ -111,7 +112,10 @@ text box."
 **Footnotes**
 - *[2026-04-30]*: M1 checklist items shipped (session drafts, editing stack in `IdeViewModel`, explorer SAF file ops MVP). *[AMENDED session]* Sync checkboxes whenever scope changes—**never delete** historical rows; supersede only with `[superseded YYYY-MM-DD]` beside the line.
 - *[AMENDED]: **Phase 2 · Tool router** granular block reflects current Anthropic-tool surface (`list_files` … `rename_path`). Trust/audit/approvals rows stay `[ ]` until implemented.*
-- *[AMENDED 2026-04-30]: **Phase 2 · Agent UX & context** — checkboxes reflect `AgentChatPanel` / `AgentViewModel` streaming + tool rows, expandable tool payloads, `IdeConstants.SYSTEM_PROMPT`, and `IdeViewModel.buildAgentWorkspaceContext()`.*
+- *[AMENDED 2026-04-30]: Epic 1.2 explorer **`filteredTree`** + lazy pin rows; Epic 2.2 **`ToolMutationAction`** apply/revert for `write_file`/`edit_file`.*
+
+- *[AMENDED 2026-04-30]: Epic 1.2 **ExplorerPinsStore** + explorer STARRED/RECENT; Epic 1.3 divider snap + Ctrl+S / Ctrl+Shift+S / Ctrl+W.*
+- *[AMENDED 2026-04-30]: Epic 2.1 visible tool receipts: expanded tool cards show provider, time, duration, target, and OK/FAILED status.*
 
 ## Release themes
 
@@ -394,3 +398,5 @@ Phase 1-3 architecture and extended to feature-complete Android AI IDE trajector
 *[AMENDED 2026-04-30]: § **Phase 2 · Agent UX & context** — granular Epic 2.2/2.3 rows synced to `AgentChatPanel.kt`, `AgentViewModel.kt`, `IdeConstants.SYSTEM_PROMPT`; Phase 2 checklist header corrected from “all `[ ]`” to partial MVP.*
 
 *[AMENDED 2026-04-30 (session)]: Explorer **filter** (`TreeFilter.kt`), **extension icons** (`ExplorerIcons.kt`), agent **expandable tool cards** + **workspace context appendix** on send.*
+
+*[AMENDED 2026-04-30]: Agent tool receipt MVP: expanded tool cards now expose visible operation receipts (provider, timestamp, duration, target, status) as a stepping stone toward persistent audit logs and approval gates.*
