@@ -18,6 +18,11 @@ val anthropicKey: String =
         ?: localProps.getProperty("anthropicApiKey")
         ?: ""
 
+val geminiKey: String =
+    (project.findProperty("geminiApiKey") as String?)
+        ?: localProps.getProperty("geminiApiKey")
+        ?: ""
+
 android {
     namespace = "com.tabletaide.ide"
     compileSdk = 35
@@ -29,6 +34,7 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         buildConfigField("String", "ANTHROPIC_API_KEY", "\"${anthropicKey.replace("\"", "\\\"")}\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"${geminiKey.replace("\"", "\\\"")}\"")
     }
 
     buildTypes {

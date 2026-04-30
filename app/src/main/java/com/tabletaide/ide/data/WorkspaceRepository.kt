@@ -17,15 +17,21 @@ import javax.inject.Singleton
 @Singleton
 class WorkspaceRepository @Inject constructor(
     @ApplicationContext private val appContext: Context,
+    private val mutationBus: WorkspaceMutationBus,
 ) {
     private val mutex = Mutex()
     private var root: DocumentFile? = null
+    private var rootTreeUri: Uri? = null
 
     fun hasRoot(): Boolean = root != null
 
     fun setRootFromUri(treeUri: Uri) {
+        rootTreeUri = treeUri
         root = DocumentFile.fromTreeUri(appContext, treeUri)
     }
+
+    /** Persisted SAF tree URI for session restore ([TRACE: DOCS/ROADMAP.md] M1). */
+    fun rootTreeUriOrNull(): Uri? = rootTreeUri
 
     fun rootOrNull(): DocumentFile? = root
 
@@ -70,12 +76,140 @@ class WorkspaceRepository @Inject constructor(
                         writer.write(content)
                     }
                 } ?: return@withContext Result.failure(IllegalStateException("Cannot write: $relativePath"))
+                mutationBus.notifyFileWritten(relativePath)
                 Result.success(Unit)
             } catch (e: Exception) {
                 Result.failure(e)
             }
         }
     }
+
+    suspend fun createEmptyFile(parentDirRelativePath: String, leafName: String): Result<String> =
+        mutex.withLock {
+            withContext(Dispatchers.IO) {
+                try {
+                    val safe = sanitizeLeafName(leafName) ?: return@withContext Result.failure(
+                        IllegalArgumentException("Invalid file name"),
+                    )
+                    val parent = resolveDirectory(parentDirRelativePath.trim('/'))
+                        ?: return@withContext Result.failure(IllegalStateException("Cannot resolve parent folder"))
+                    if (parent.findFile(safe) != null) {
+                        return@withContext Result.failure(IllegalStateException("Already exists: $safe"))
+                    }
+                    parent.createFile("text/plain", safe)
+                        ?: return@withContext Result.failure(IllegalStateException("Cannot create: $safe"))
+                    val rel = joinRelative(parentDirRelativePath.trim('/'), safe)
+                    mutationBus.notifyFileWritten(rel)
+                    Result.success(rel)
+                } catch (e: Exception) {
+                    Result.failure(e)
+                }
+            }
+        }
+
+    suspend fun createDirectory(relativeFolderPath: String): Result<String> =
+        mutex.withLock {
+            withContext(Dispatchers.IO) {
+                try {
+                    val trimmed = relativeFolderPath.trim('/')
+                    if (trimmed.isEmpty()) {
+                        return@withContext Result.failure(IllegalArgumentException("Empty folder path"))
+                    }
+                    val lastSlash = trimmed.lastIndexOf('/')
+                    val parentPath = if (lastSlash < 0) "" else trimmed.substring(0, lastSlash)
+                    val leaf = if (lastSlash < 0) trimmed else trimmed.substring(lastSlash + 1)
+                    val parentDir = resolveOrCreateDirectory(parentPath)
+                        ?: return@withContext Result.failure(IllegalStateException("Cannot create parent"))
+                    val existing = parentDir.findFile(leaf)
+                    return@withContext when {
+                        existing != null && existing.isDirectory -> Result.success(trimmed)
+                        existing != null -> Result.failure(
+                            IllegalStateException("Name already used by a file"),
+                        )
+                        parentDir.createDirectory(leaf) != null -> Result.success(trimmed)
+                        else -> Result.failure(IllegalStateException("Cannot create folder"))
+                    }
+                } catch (e: Exception) {
+                    Result.failure(e)
+                }
+            }
+        }
+
+    suspend fun renameLeaf(relativePath: String, newLeafName: String): Result<String> =
+        mutex.withLock {
+            withContext(Dispatchers.IO) {
+                try {
+                    val safe = sanitizeLeafName(newLeafName) ?: return@withContext Result.failure(
+                        IllegalArgumentException("Invalid file name"),
+                    )
+                    val src = resolveFile(relativePath)
+                        ?: return@withContext Result.failure(IllegalArgumentException("Not found: $relativePath"))
+                    val parentSeg = parentSegmentOf(relativePath)
+                    val parentDoc = resolveDirectory(parentSeg)
+                        ?: return@withContext Result.failure(IllegalStateException("Cannot resolve parent"))
+                    if (parentDoc.findFile(safe) != null) {
+                        return@withContext Result.failure(IllegalStateException("Already exists: $safe"))
+                    }
+                    if (!src.renameTo(safe)) {
+                        return@withContext Result.failure(IllegalStateException("Rename failed"))
+                    }
+                    val newRel = joinRelative(parentSeg.trimEnd('/'), safe)
+                    mutationBus.notifyFileWritten(newRel)
+                    Result.success(newRel)
+                } catch (e: Exception) {
+                    Result.failure(e)
+                }
+            }
+        }
+
+    suspend fun duplicateFile(relativePath: String): Result<String> =
+        mutex.withLock {
+            withContext(Dispatchers.IO) {
+                try {
+                    val src = resolveFile(relativePath)
+                        ?: return@withContext Result.failure(IllegalArgumentException("Not found: $relativePath"))
+                    if (!src.isFile) {
+                        return@withContext Result.failure(IllegalArgumentException("Not a file: $relativePath"))
+                    }
+                    val leaf = relativePath.substringAfterLast('/')
+                    val parentSeg = parentSegmentOf(relativePath)
+                    val parentDoc = resolveDirectory(parentSeg)
+                        ?: return@withContext Result.failure(IllegalStateException("Cannot resolve parent"))
+                    val destName = uniqueLeafName(parentDoc, duplicateLeafName(leaf))
+                    val txt = appContext.contentResolver.openInputStream(src.uri)?.use { inp ->
+                        BufferedReader(InputStreamReader(inp, Charsets.UTF_8)).readText()
+                    } ?: return@withContext Result.failure(IllegalStateException("Cannot read source"))
+                    val created = parentDoc.createFile(src.type ?: "text/plain", destName)
+                        ?: return@withContext Result.failure(IllegalStateException("Cannot create copy"))
+                    appContext.contentResolver.openOutputStream(created.uri, "wt")?.use { out ->
+                        OutputStreamWriter(out, Charsets.UTF_8).use { writer -> writer.write(txt) }
+                    } ?: return@withContext Result.failure(IllegalStateException("Cannot write copy"))
+                    val newRel = joinRelative(parentSeg, destName)
+                    mutationBus.notifyFileWritten(newRel)
+                    Result.success(newRel)
+                } catch (e: Exception) {
+                    Result.failure(e)
+                }
+            }
+        }
+
+    suspend fun deleteNode(relativePath: String): Result<Unit> =
+        mutex.withLock {
+            withContext(Dispatchers.IO) {
+                try {
+                    val doc =
+                        resolveFile(relativePath) ?: return@withContext Result.failure(
+                            IllegalArgumentException("Not found: $relativePath"),
+                        )
+                    if (!deleteTree(doc)) {
+                        return@withContext Result.failure(IllegalStateException("Delete failed"))
+                    }
+                    Result.success(Unit)
+                } catch (e: Exception) {
+                    Result.failure(e)
+                }
+            }
+        }
 
     fun listTreeRows(): List<TreeRow> {
         val r = root ?: return emptyList()
@@ -122,6 +256,65 @@ class WorkspaceRepository @Inject constructor(
             }
         }
         return current
+    }
+
+    private fun parentSegmentOf(relativePath: String): String {
+        val trimmed = relativePath.trim('/')
+        val idx = trimmed.lastIndexOf('/')
+        return if (idx < 0) "" else trimmed.substring(0, idx).trim('/')
+    }
+
+    private fun resolveDirectory(parentRelativeTrimmed: String): DocumentFile? {
+        val trimmed = parentRelativeTrimmed.trim('/')
+        val r = root ?: return null
+        if (trimmed.isEmpty()) return r
+        val doc = resolveFile(trimmed)
+        return doc?.takeIf { it.isDirectory }
+    }
+
+    private fun joinRelative(parentRelativeTrimmed: String, leaf: String): String {
+        val p = parentRelativeTrimmed.trim('/').trimEnd()
+        val safeLeaf = leaf.trim('/')
+        return if (p.isEmpty()) safeLeaf else "$p/$safeLeaf"
+    }
+
+    private fun sanitizeLeafName(name: String): String? {
+        val t = name.trim()
+        if (t.isEmpty() || t.contains('/') || t.contains('\\')) return null
+        if (t == "." || t == "..") return null
+        return t
+    }
+
+    private fun duplicateLeafName(leaf: String): String {
+        val dot = leaf.lastIndexOf('.')
+        return if (dot <= 0) {
+            "${leaf}_copy"
+        } else {
+            "${leaf.substring(0, dot)}_copy${leaf.substring(dot)}"
+        }
+    }
+
+    private fun uniqueLeafName(dir: DocumentFile, desired: String): String {
+        if (dir.findFile(desired) == null) return desired
+        val dot = desired.lastIndexOf('.')
+        val base = if (dot <= 0) desired else desired.substring(0, dot)
+        val extWithDot = if (dot <= 0) "" else desired.substring(dot)
+        var n = 2
+        while (true) {
+            val cand = "${base}_$n$extWithDot"
+            if (dir.findFile(cand) == null) return cand
+            n++
+        }
+    }
+
+    private fun deleteTree(doc: DocumentFile): Boolean {
+        if (doc.isDirectory) {
+            val kids = doc.listFiles()
+            kids?.forEach { child ->
+                if (!deleteTree(child)) return false
+            }
+        }
+        return doc.delete()
     }
 }
 

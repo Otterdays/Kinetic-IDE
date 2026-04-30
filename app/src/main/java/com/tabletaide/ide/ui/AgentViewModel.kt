@@ -3,14 +3,17 @@ package com.tabletaide.ide.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tabletaide.ide.IdeConstants
-import com.tabletaide.ide.agent.AnthropicClient
+import com.tabletaide.ide.agent.AnthropicClientImpl
+import com.tabletaide.ide.agent.GeminiClientImpl
+import com.tabletaide.ide.agent.LlmClient
 import com.tabletaide.ide.agent.StreamEvent
 import com.tabletaide.ide.agent.ToolRouter
+import com.tabletaide.ide.data.LlmProvider
+import com.tabletaide.ide.data.LlmProviderStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -20,12 +23,22 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AgentViewModel @Inject constructor(
-    private val client: AnthropicClient,
+    private val anthropicClient: AnthropicClientImpl,
+    private val geminiClient: GeminiClientImpl,
     private val toolRouter: ToolRouter,
+    private val providerStore: LlmProviderStore,
 ) : ViewModel() {
+
+    private fun getClient(): LlmClient = when (_provider.value) {
+        LlmProvider.ANTHROPIC -> anthropicClient
+        LlmProvider.GEMINI -> geminiClient
+    }
 
     private val apiHistory = JSONArray()
     private val toolsJson = toolRouter.toolDefinitions()
+
+    private val _provider = MutableStateFlow(providerStore.getProvider())
+    val provider: StateFlow<LlmProvider> = _provider.asStateFlow()
 
     private val _lines = MutableStateFlow<List<ChatLine>>(emptyList())
     val lines: StateFlow<List<ChatLine>> = _lines.asStateFlow()
@@ -36,7 +49,12 @@ class AgentViewModel @Inject constructor(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    fun sendUserMessage(text: String) {
+    fun setProvider(provider: LlmProvider) {
+        providerStore.setProvider(provider)
+        _provider.value = provider
+    }
+
+    fun sendUserMessage(text: String, systemPromptAppendix: String = "") {
         val trimmed = text.trim()
         if (trimmed.isEmpty() || _busy.value) return
         viewModelScope.launch {
@@ -49,7 +67,7 @@ class AgentViewModel @Inject constructor(
             apiHistory.put(
                 JSONObject().put("role", "user").put("content", userContent),
             )
-            runAgentRounds()
+            runAgentRounds(systemPromptAppendix.trim())
             _busy.value = false
         }
     }
@@ -63,7 +81,14 @@ class AgentViewModel @Inject constructor(
         _error.value = null
     }
 
-    private suspend fun runAgentRounds() {
+    private suspend fun runAgentRounds(systemPromptAppendix: String = "") {
+        val systemPrompt = buildString {
+            append(IdeConstants.SYSTEM_PROMPT)
+            if (systemPromptAppendix.isNotEmpty()) {
+                append("\n\n")
+                append(systemPromptAppendix)
+            }
+        }
         var round = 0
         while (round < IdeConstants.MAX_TOOL_ROUNDS) {
             round++
@@ -72,9 +97,13 @@ class AgentViewModel @Inject constructor(
             val toolCalls = mutableListOf<ToolCall>()
             var streamError: String? = null
 
-            client.streamMessage(
-                model = IdeConstants.ANTHROPIC_MODEL,
-                systemPrompt = IdeConstants.SYSTEM_PROMPT,
+            val model = when (_provider.value) {
+                LlmProvider.ANTHROPIC -> IdeConstants.ANTHROPIC_MODEL
+                LlmProvider.GEMINI -> IdeConstants.GEMINI_MODEL
+            }
+            getClient().streamMessage(
+                model = model,
+                systemPrompt = systemPrompt,
                 messages = apiHistory,
                 tools = toolsJson,
                 maxTokens = IdeConstants.MAX_OUTPUT_TOKENS,
@@ -106,7 +135,7 @@ class AgentViewModel @Inject constructor(
             val toolResults = JSONArray()
             for (call in toolCalls) {
                 val resultText = toolRouter.dispatch(call.name, call.input)
-                appendToolLine(call.name, resultText)
+                appendToolLine(call.name, call.input, resultText)
                 toolResults.put(
                     JSONObject()
                         .put("type", "tool_result")
@@ -154,10 +183,26 @@ class AgentViewModel @Inject constructor(
         }
     }
 
-    private fun appendToolLine(name: String, detail: String) {
-        val clipped = if (detail.length > 2000) detail.take(2000) + "…" else detail
+    private fun appendToolLine(name: String, input: JSONObject, resultText: String) {
+        val inputJson = try {
+            input.toString(2)
+        } catch (_: Exception) {
+            input.toString()
+        }
+        val full = if (resultText.length > TOOL_RESULT_UI_MAX_CHARS) {
+            resultText.take(TOOL_RESULT_UI_MAX_CHARS) + "\n… (truncated for chat UI)"
+        } else {
+            resultText
+        }
+        val preview = if (full.length <= TOOL_PREVIEW_CHARS) full else full.take(TOOL_PREVIEW_CHARS) + "…"
         _lines.update {
-            it + ChatLine.Tool(UUID.randomUUID().toString(), name, clipped)
+            it + ChatLine.Tool(
+                id = UUID.randomUUID().toString(),
+                name = name,
+                inputJson = inputJson,
+                resultFull = full,
+                preview = preview,
+            )
         }
     }
 
@@ -187,6 +232,17 @@ class AgentViewModel @Inject constructor(
         data class User(override val id: String, val text: String) : ChatLine()
         data class AssistantStreaming(override val id: String, val text: String) : ChatLine()
         data class AssistantDone(override val id: String, val text: String) : ChatLine()
-        data class Tool(override val id: String, val name: String, val detail: String) : ChatLine()
+        data class Tool(
+            override val id: String,
+            val name: String,
+            val inputJson: String,
+            val resultFull: String,
+            val preview: String,
+        ) : ChatLine()
+    }
+
+    private companion object {
+        private const val TOOL_RESULT_UI_MAX_CHARS = 100_000
+        private const val TOOL_PREVIEW_CHARS = 600
     }
 }

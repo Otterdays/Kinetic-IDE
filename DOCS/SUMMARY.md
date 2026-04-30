@@ -21,6 +21,7 @@
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Layer diagram, data flow, module map |
 | [SCRATCHPAD.md](./SCRATCHPAD.md) | Active tasks, blockers, recent actions |
 | [SBOM.md](./SBOM.md) | Dependencies and supply-chain notes |
+| [ROADMAP.md](./ROADMAP.md) | Granular Android AI IDE execution roadmap |
 | [STYLE_GUIDE.md](./STYLE_GUIDE.md) | Conventions for this repo |
 | [My_Thoughts.md](./My_Thoughts.md) | Decisions and rationale |
 | [CHANGELOG.md](./CHANGELOG.md) | Version history |
@@ -57,3 +58,11 @@
 *[2026-03-29]: [AMENDED] Added snapshot block and README link; L2 stack note for KSP + built-in Kotlin.*
 
 *[2026-03-29]: [AMENDED] README GitHub polish + .vscode JDK settings called out in snapshot.*
+
+*[2026-04-30]: [AMENDED] Added ROADMAP quick link for phased execution planning.*
+
+*[2026-04-30]: [AMENDED] `DOCS/ROADMAP.md` Phase 2 tracker: tool router + agent panel granular checklists (partial MVP); Epic 2.2/2.3 broken out from single “backlog” lines.*
+
+*[2026-04-30]: [AMENDED] Ship: explorer tree filter + extension icons; agent expandable tool cards; per-send workspace context (tabs + selection) in system prompt.*
+
+*[2026-04-30]: [AMENDED] Multi-provider LLM: `LlmClient` interface, `GeminiClientImpl`, `LlmProviderStore`, provider picker in AI Architect panel. `ToolRouter` 3→8 tools (`edit_file`, `search_files`, `create_directory`, `delete_path`, `rename_path`). `SYSTEM_PROMPT` enumerates all tools. Add `geminiApiKey` to `local.properties` to enable Gemini.*

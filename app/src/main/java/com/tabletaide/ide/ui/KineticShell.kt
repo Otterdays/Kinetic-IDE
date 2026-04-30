@@ -17,7 +17,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Inventory2
@@ -159,9 +162,14 @@ private fun railItemColors(selected: Boolean) = NavigationRailItemDefaults.color
 fun KineticTopBar(
     tabs: List<EditorTab>,
     selectedIndex: Int,
+    canUndoNow: Boolean,
+    canRedoNow: Boolean,
     onSelectTab: (Int) -> Unit,
     onCloseTab: (Int) -> Unit,
     onSave: () -> Unit,
+    onSaveAll: () -> Unit,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
     onExecute: () -> Unit,
     agentBusy: Boolean,
     modifier: Modifier = Modifier,
@@ -202,7 +210,7 @@ fun KineticTopBar(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = tab.fileName + if (tab.dirty) " *" else "",
+                                text = tab.fileName + if (tab.dirty) " ·" else "",
                                 fontSize = 13.sp,
                                 fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Medium,
                                 color = if (sel) KineticColors.railAccent else KineticColors.onSurfaceVariant,
@@ -245,8 +253,25 @@ fun KineticTopBar(
                 fontSize = 11.sp,
                 color = KineticColors.onSurfaceVariant,
             )
+            IconButton(onClick = onUndo, enabled = canUndoNow) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Undo,
+                    "Undo",
+                    tint = if (canUndoNow) KineticColors.onSurface else KineticColors.outline.copy(alpha = 0.4f),
+                )
+            }
+            IconButton(onClick = onRedo, enabled = canRedoNow) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Redo,
+                    "Redo",
+                    tint = if (canRedoNow) KineticColors.onSurface else KineticColors.outline.copy(alpha = 0.4f),
+                )
+            }
             IconButton(onClick = onSave, enabled = tabs.isNotEmpty()) {
                 Icon(Icons.Default.Save, "Save", tint = KineticColors.primary)
+            }
+            IconButton(onClick = onSaveAll, enabled = tabs.any { it.dirty }) {
+                Icon(Icons.Default.DoneAll, "Save all", tint = KineticColors.primary)
             }
             Text(
                 text = "Debug",

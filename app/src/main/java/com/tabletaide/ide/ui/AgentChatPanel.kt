@@ -2,6 +2,7 @@ package com.tabletaide.ide.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tabletaide.ide.data.LlmProvider
 import com.tabletaide.ide.ui.theme.KineticColors
 
 @Composable
@@ -44,11 +48,14 @@ fun AgentChatPanel(
     lines: List<AgentViewModel.ChatLine>,
     busy: Boolean,
     error: String?,
+    currentProvider: LlmProvider,
     onSend: (String) -> Unit,
     onClear: () -> Unit,
+    onProviderChange: (LlmProvider) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var draft by remember { mutableStateOf("") }
+    var providerMenuOpen by remember { mutableStateOf(false) }
     Column(
         modifier = modifier
             .fillMaxHeight()
@@ -69,14 +76,41 @@ fun AgentChatPanel(
                         .clip(CircleShape)
                         .background(KineticColors.primary),
                 )
-                Text(
-                    text = "AI ARCHITECT",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.6.sp,
-                    color = KineticColors.onSurface,
-                    modifier = Modifier.padding(start = 10.dp),
-                )
+                Column {
+                    Text(
+                        text = "AI ARCHITECT",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.6.sp,
+                        color = KineticColors.onSurface,
+                        modifier = Modifier.padding(start = 10.dp),
+                    )
+                    Box {
+                        Text(
+                            text = currentProvider.displayName,
+                            fontSize = 9.sp,
+                            color = KineticColors.onSurfaceVariant,
+                            modifier = Modifier
+                                .padding(start = 10.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .clickable { providerMenuOpen = true }
+                        )
+                        DropdownMenu(
+                            expanded = providerMenuOpen,
+                            onDismissRequest = { providerMenuOpen = false },
+                        ) {
+                            LlmProvider.entries.forEach { provider ->
+                                DropdownMenuItem(
+                                    text = { Text(provider.displayName) },
+                                    onClick = {
+                                        onProviderChange(provider)
+                                        providerMenuOpen = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
             }
             IconButton(onClick = onClear, enabled = !busy) {
                 Icon(Icons.Default.Clear, contentDescription = "Clear", tint = KineticColors.onSurfaceVariant)
@@ -166,26 +200,55 @@ fun AgentChatPanel(
                         AssistantBubble(line.text)
                     }
                     is AgentViewModel.ChatLine.Tool -> {
+                        var expanded by remember(line.id) { mutableStateOf(false) }
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(KineticColors.primary.copy(alpha = 0.08f))
                                 .border(1.dp, KineticColors.primary.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
+                                .clickable { expanded = !expanded }
                                 .padding(12.dp),
                         ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    "TOOL · ${line.name}",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = KineticColors.primary,
+                                )
+                                Text(
+                                    if (expanded) "▼" else "▶",
+                                    fontSize = 10.sp,
+                                    color = KineticColors.outline,
+                                )
+                            }
                             Text(
-                                "TOOL · ${line.name}",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = KineticColors.primary,
-                            )
-                            Text(
-                                line.detail,
+                                text = if (expanded) line.resultFull else line.preview,
                                 fontSize = 11.sp,
                                 color = KineticColors.onSurfaceVariant,
                                 modifier = Modifier.padding(top = 6.dp),
                             )
+                            if (expanded) {
+                                Text(
+                                    "Request (JSON)",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = KineticColors.outline,
+                                    modifier = Modifier.padding(top = 10.dp),
+                                )
+                                Text(
+                                    line.inputJson,
+                                    fontSize = 10.sp,
+                                    color = KineticColors.onSurfaceVariant,
+                                    lineHeight = 14.sp,
+                                    modifier = Modifier.padding(top = 4.dp),
+                                )
+                            }
                         }
                     }
                 }

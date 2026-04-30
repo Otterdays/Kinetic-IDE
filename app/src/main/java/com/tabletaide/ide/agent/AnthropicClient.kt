@@ -14,7 +14,7 @@ import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
-interface AnthropicClient {
+interface LlmClient {
     fun streamMessage(
         model: String,
         systemPrompt: String?,
@@ -27,7 +27,7 @@ interface AnthropicClient {
 @Singleton
 class AnthropicClientImpl @Inject constructor(
     private val httpClient: OkHttpClient,
-) : AnthropicClient {
+) : LlmClient {
 
     override fun streamMessage(
         model: String,
