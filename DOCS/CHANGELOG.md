@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Root **`build.bat`**: runs `gradlew :app:assembleDebug` and copies the APK to **`BUILT\`**; optional argument **`release`** runs `assembleRelease` (add a `signingConfig` if AGP requires it). **`BUILT/`** in `.gitignore`.
+
 - **[ROADMAP Epic 1.2 / Epic 2.2–2.3] Explorer + agent UX:** File tree **filter** (`TreeFilter.kt` —
   ordered-character fuzzy match, keeps ancestor folders). **Extension-based icons** in explorer
   (`ExplorerIcons.kt`). Agent panel **expandable tool cards** (tap to show full result + indented

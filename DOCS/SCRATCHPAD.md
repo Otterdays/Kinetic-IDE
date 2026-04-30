@@ -14,6 +14,11 @@
   - `SYSTEM_PROMPT` rewritten to enumerate all 8 tools + 4-step usage strategy
 - **Next:** Add `geminiApiKey` to `local.properties` to enable Gemini; test tool-use round-trips on both providers; consider write-preview / confirm gate before `delete_path`.
 
+## Session checkpoint — 2026-04-30 (build.bat)
+
+- **Done:** Root `build.bat`: `gradlew :app:assembleDebug` (default), copy `*.apk` to `BUILT\`; optional arg `release` → `assembleRelease` + `apk\release`. `.gitignore`: `/BUILT/`.
+- **Next:** If `release` fails, add `signingConfig` in `app/build.gradle.kts` or use debug builds only.
+
 ## Session checkpoint — 2026-04-30 (checklist implementation: explorer + agent)
 
 - **Done:** Roadmap-aligned features: explorer **filter** (`TreeFilter.kt`), **icons by extension**
