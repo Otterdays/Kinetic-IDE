@@ -1,5 +1,9 @@
 # Gradle
 /.gradle/
+/app/.gradle/
+/app/gradle/
+/app/gradlew
+/app/gradlew.bat
 /build/
 /app/build/
 **/build/
@@ -21,3 +25,6 @@ local.properties
 
 # Kotlin tooling
 .kotlin/
+
+# Local crash dumps
+*.hprof

@@ -2,6 +2,28 @@
 
 # SCRATCHPAD — Kinetic
 
+## Session checkpoint — 2026-04-30 (Gradle incremental cache corruption recovery)
+
+- **Issue:** Multi-task assemble run failed with missing generated intermediates (`mergeExtDexDebug`,
+  `compileDebugJavaWithJavac`) and Kotlin daemon incremental cache close/assertion errors (`*.tab`
+  storage already registered) under `app/build/kotlin/.../cacheable/caches-jvm`.
+- **Fix:** Reset daemon + ephemeral build outputs, then rerun full targets from repo root:
+  `./gradlew.bat --stop` → delete `app/build` → `./gradlew.bat :app:assembleDebug :app:assembleDebugUnitTest :app:assembleDebugAndroidTest --no-build-cache --rerun-tasks`.
+- **Result:** **BUILD SUCCESSFUL** (all three targets assembled). No source changes required.
+
+## Session checkpoint — 2026-04-30 (standalone app Gradle memory)
+
+- **Issue:** Running Gradle tasks from `app/` showed daemon GC thrashing with default 512 MiB heap.
+- **Fix:** Added `app/gradle.properties` with `org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m`
+  plus Android/Kotlin defaults for the standalone app-import path. Verified with
+  `..\gradlew.bat clean compileDebugKotlin` from `app/` (**BUILD SUCCESSFUL** after clean rerun).
+
+## Session checkpoint — 2026-04-30 (git noise cleanup)
+
+- **Done:** Added `.gitignore` coverage for nested app Gradle artifacts (`app/.gradle/`, `app/gradle/`,
+  `app/gradlew*`) and local heap dumps (`*.hprof`); untracked previously tracked cache lock/bin files
+  under `app/.gradle` to stop recurring dirty status after local sync/build.
+
 ## Session checkpoint — 2026-04-30 (AGP bump)
 
 - **Done:** Aligned root plugin management to **AGP 9.2.0** in `settings.gradle.kts` (app module was

@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Gradle memory fix for standalone app import:** added `app/gradle.properties` with
+  `org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8` (plus standard
+  Android/Kotlin flags) so IDE runs targeting `app/` do not use the default 512 MiB heap and trigger
+  daemon GC-thrashing warnings.
+
+- **Git hygiene:** `.gitignore` now excludes nested app-module Gradle artifacts (`app/.gradle/`,
+  `app/gradle/`, `app/gradlew*`) and local heap dumps (`*.hprof`), and previously tracked cache files
+  were untracked to keep `git status` clean after local IDE sync/build runs.
+
 - **Build alignment:** root `settings.gradle.kts` now uses **AGP 9.2.0** so plugin management matches
   the app module plugin version.
 
