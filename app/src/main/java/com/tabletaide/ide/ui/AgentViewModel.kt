@@ -71,6 +71,10 @@ class AgentViewModel @Inject constructor(
     fun sendUserMessage(text: String, systemPromptAppendix: String = "") {
         val trimmed = text.trim()
         if (trimmed.isEmpty() || _busy.value) return
+        if (!_credentials.value.hasKey(_provider.value)) {
+            _error.value = "API key required. Tap the key icon in AI Architect to add one."
+            return
+        }
         viewModelScope.launch {
             _busy.value = true
             _error.value = null

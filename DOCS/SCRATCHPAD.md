@@ -2,6 +2,17 @@
 
 # SCRATCHPAD — Kinetic
 
+## Session checkpoint — 2026-04-30 (AI Architect provider label + key gate)
+
+- **Issue:** AI Architect header showed provider branding ("Claude") on first open, which looked hardcoded
+  before users configured credentials.
+- **Fix:** `AgentChatPanel` now shows neutral header text (`Add API key`) until the selected provider
+  has a key, adds inline guidance (`Add an API key with the key icon to start chatting.`), and keeps
+  status at **NEEDS KEY**.
+- **Guardrail:** `AgentViewModel.sendUserMessage` now fails fast with explicit error when selected provider
+  has no key (`API key required. Tap the key icon in AI Architect to add one.`).
+- **Verify:** `./gradlew.bat :app:compileDebugKotlin` **BUILD SUCCESSFUL**.
+
 ## Session checkpoint — 2026-04-30 (Gradle incremental cache corruption recovery)
 
 - **Issue:** Multi-task assemble run failed with missing generated intermediates (`mergeExtDexDebug`,

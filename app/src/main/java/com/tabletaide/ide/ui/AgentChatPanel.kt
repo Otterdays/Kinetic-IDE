@@ -67,6 +67,12 @@ fun AgentChatPanel(
     var draft by remember { mutableStateOf("") }
     var providerMenuOpen by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
+    val hasSelectedProviderKey = credentials.hasKey(currentProvider)
+    val providerLabel = if (hasSelectedProviderKey) {
+        currentProvider.displayName
+    } else {
+        "Add API key"
+    }
     Column(
         modifier = modifier
             .fillMaxHeight()
@@ -98,7 +104,7 @@ fun AgentChatPanel(
                     )
                     Box {
                         Text(
-                            text = currentProvider.displayName,
+                            text = providerLabel,
                             fontSize = 9.sp,
                             color = KineticColors.onSurfaceVariant,
                             modifier = Modifier
@@ -155,12 +161,20 @@ fun AgentChatPanel(
                 Text(
                     when {
                         busy -> "WORKING"
-                        credentials.hasKey(currentProvider) -> "READY"
+                        hasSelectedProviderKey -> "READY"
                         else -> "NEEDS KEY"
                     },
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     color = KineticColors.primary,
+                )
+            }
+            if (!hasSelectedProviderKey) {
+                Text(
+                    "Add an API key with the key icon to start chatting.",
+                    fontSize = 10.sp,
+                    color = KineticColors.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
                 )
             }
             Box(
