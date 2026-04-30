@@ -2,54 +2,49 @@
 
 # SBOM — Kinetic
 
-**Last updated:** 2026-04-30 ([AMENDED]: Gradle IDE sync compatibility task added; no dependency version changes). Prior: Tool receipt MVP added with existing Kotlin/Compose APIs; Runtime API key input added with existing Android SharedPreferences; README/GitHub + `.vscode` JDK settings documented; AGP built-in Kotlin — no `kotlin.android` plugin; Hilt 2.59.2 + KSP 2.3.6; Gradle wrapper 9.4.1; AGP 9.1.0; Kotlin 2.3.10 (Compose compiler plugin).
+**Last updated:** 2026-04-30
 
-## Application dependencies
+## Build toolchain
 
-_Android `:app` — versions from `app/build.gradle.kts` / Compose BOM; update rows when changing deps._
+| Component | Version |
+|---|---|
+| Gradle wrapper | 9.4.1 |
+| Android Gradle Plugin | 9.2.0 |
+| Kotlin Compose plugin | 2.3.10 |
+| KSP plugin | 2.3.6 |
+| Hilt Gradle plugin | 2.59.2 |
+| Foojay resolver convention plugin | 1.0.0 |
 
-**Maintenance:** After changing `settings.gradle.kts` plugin versions or `app/build.gradle.kts` dependencies, update the table below and bump **Last updated** in this file’s header. Primary sources: [`settings.gradle.kts`](../settings.gradle.kts), [`app/build.gradle.kts`](../app/build.gradle.kts), [`gradle/wrapper/gradle-wrapper.properties`](../gradle/wrapper/gradle-wrapper.properties).
+## Runtime dependencies (`implementation`)
 
-| Package | Version | Scope | Notes |
-|---------|---------|-------|-------|
-| Android Gradle Plugin | 9.1.0 | build | |
-| Kotlin (Compose compiler plugin) | 2.3.10 | build | Built-in Kotlin via AGP 9; no `org.jetbrains.kotlin.android` |
-| KSP | 2.3.6 | build | `com.google.devtools.ksp`; Hilt code gen |
-| Gradle (wrapper) | 9.4.1 | build | distributionUrl in `gradle/wrapper/gradle-wrapper.properties` |
-| Compose BOM | 2024.12.01 | implementation | platform |
-| androidx.core:core-ktx | 1.15.0 | implementation | |
-| activity-compose | 1.9.3 | implementation | |
-| lifecycle (runtime-ktx, viewmodel-compose, runtime-compose) | 2.8.7 | implementation | |
-| material3 / compose ui | (BOM) | implementation | |
-| material-icons-extended | (BOM) | implementation | |
-| documentfile | 1.1.0 | implementation | SAF |
-| Hilt | 2.59.2 | implementation + ksp | AGP 9 new DSL |
-| androidx.hilt:hilt-navigation-compose | 1.2.0 | implementation | `hiltViewModel()` |
-| OkHttp | 4.12.0 | implementation | SSE |
-| kotlinx-coroutines-android | 1.9.0 | implementation | |
-| — | — | — | Remove stale rows when amending; do not delete historical block above |
+| Dependency | Version |
+|---|---|
+| androidx.compose:compose-bom | 2024.12.01 |
+| androidx.core:core-ktx | 1.15.0 |
+| androidx.activity:activity-compose | 1.9.3 |
+| androidx.lifecycle:lifecycle-runtime-ktx | 2.8.7 |
+| androidx.lifecycle:lifecycle-viewmodel-compose | 2.8.7 |
+| androidx.lifecycle:lifecycle-runtime-compose | 2.8.7 |
+| androidx.compose.ui:ui | via BOM |
+| androidx.compose.ui:ui-tooling-preview | via BOM |
+| androidx.compose.material3:material3 | via BOM |
+| androidx.compose.material:material-icons-extended | via BOM |
+| androidx.documentfile:documentfile | 1.1.0 |
+| com.google.dagger:hilt-android | 2.59.2 |
+| androidx.hilt:hilt-navigation-compose | 1.2.0 |
+| com.squareup.okhttp3:okhttp | 4.12.0 |
+| org.jetbrains.kotlinx:kotlinx-coroutines-android | 1.9.0 |
 
-## Tooling / CI
+## Build-time / debug / test dependencies
 
-_Not configured._
+| Dependency | Version | Scope |
+|---|---|---|
+| com.google.dagger:hilt-compiler | 2.59.2 | ksp |
+| androidx.compose.ui:ui-tooling | via BOM | debugImplementation |
+| androidx.compose.ui:ui-test-manifest | via BOM | debugImplementation |
+| androidx.compose:compose-bom | 2024.12.01 | androidTestImplementation |
 
-## Policy
+## Notes
 
-- Audit before adding dependencies; prefer well-maintained, minimal transitive trees.
-- No known-vulnerable versions; pin versions when the build exists.
-
----
-
-*[2026-03-28]: Initialized SBOM. No bill of materials entries until first dependency manifest exists.*
-
-*[2026-03-28]: [AMENDED] Gradle deps from `:app` reflected in table above.*
-
-*[2026-03-29]: [AMENDED] Maintenance blurb (where to edit when versions change).*
-
-*[2026-03-29]: [AMENDED] Header note — docs/README refresh; SBOM table unchanged.*
-
-*[2026-04-30]: [AMENDED] Runtime API key input uses existing Android SharedPreferences / Compose / Hilt stack; no packages added or removed.*
-
-*[2026-04-30]: [AMENDED] Tool receipt MVP uses existing Kotlin standard library time formatting and Compose UI; no packages added or removed.*
-
-*[2026-04-30]: [AMENDED] Gradle IDE sync compatibility task added in root `build.gradle.kts`; no packages or plugin versions changed.*
+- Source of truth: `settings.gradle.kts`, `app/build.gradle.kts`, `app/settings.gradle.kts`, `gradle/wrapper/gradle-wrapper.properties`.
+- Root repo policy: `FAIL_ON_PROJECT_REPOS` with `google()` and `mavenCentral()`.

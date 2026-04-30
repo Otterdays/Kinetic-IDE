@@ -1,10 +1,10 @@
 import java.util.Properties
 
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.plugin.compose")
-    id("com.google.devtools.ksp")
-    id("com.google.dagger.hilt.android")
+    id("com.android.application") version "9.2.0"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.3.10"
+    id("com.google.devtools.ksp") version "2.3.6"
+    id("com.google.dagger.hilt.android") version "2.59.2"
 }
 
 val localProps = Properties()

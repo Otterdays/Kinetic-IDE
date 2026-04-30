@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Build alignment:** root `settings.gradle.kts` now uses **AGP 9.2.0** so plugin management matches
+  the app module plugin version.
+
+- **Gradle app-module import compatibility:** `app/build.gradle.kts` declares plugin versions directly
+  and `app/settings.gradle.kts` supplies plugin/dependency repositories, so IDEs that accidentally
+  import `app/` as the build root can still resolve AGP / KSP / Hilt / Compose plugins.
+
 - **[ROADMAP Epic 1.2 / Epic 2.2]** Explorer filter hoisted to **`IdeViewModel`** (`explorerTreeFilterQuery`, **`filteredTree`** via `filterTreeRows`); **`FileTreePane`** uses discrete lazy items + **content types** for STARRED / RECENT / tree rows. **`AgentViewModel`** + **`WorkspaceRepository`**: **`ToolMutationAction`** on successful **`write_file`** / **`edit_file`** tool rows — expanded card **Revert file** / **Apply again** with compare-and-swap and **CONFLICT** messaging when disk diverges.
 
 - **Gradle IDE sync compatibility:** root `build.gradle.kts` conditionally registers a no-op

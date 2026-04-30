@@ -76,3 +76,5 @@
 *[2026-04-30]: [AMENDED] Explorer **`filteredTree`** + lazy pin **content types**; agent tool **`ToolMutationAction`** (Revert / Apply again) for **`write_file`** / **`edit_file`**.**
 
 *[2026-04-30]: [AMENDED] Gradle IDE sync compatibility: root `build.gradle.kts` adds conditional no-op `prepareKotlinBuildScriptModel` for tooling that requests the legacy task under AGP 9 built-in Kotlin.*
+
+*[2026-04-30]: [AMENDED] App-module Gradle import compatibility: `app/build.gradle.kts` declares plugin versions and `app/settings.gradle.kts` provides repositories so importing `app/` directly resolves Android/KSP/Hilt/Compose plugins.*

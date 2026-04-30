@@ -2,6 +2,28 @@
 
 # SCRATCHPAD — Kinetic
 
+## Session checkpoint — 2026-04-30 (AGP bump)
+
+- **Done:** Aligned root plugin management to **AGP 9.2.0** in `settings.gradle.kts` (app module was
+  already on 9.2.0). Updated `DOCS/SBOM.md` build toolchain row accordingly.
+
+## Session checkpoint — 2026-04-30 (SBOM clarity pass)
+
+- **Done:** Reviewed build sources (`settings.gradle.kts`, `build.gradle.kts`, `app/build.gradle.kts`,
+  `app/settings.gradle.kts`, wrapper properties) and amended `DOCS/SBOM.md` with a canonical,
+  grouped inventory: build toolchain/plugins, runtime deps, build-time codegen, debug/test scopes,
+  and repository/import notes.
+- **Next:** Keep canonical SBOM section as the first update target when any Gradle plugin/dependency changes.
+
+## Session checkpoint — 2026-04-30 (app-module standalone Gradle import)
+
+- **Issue:** Importing/running Gradle from `app/` made `com.android.application` unresolved because
+  plugin versions/repos lived only in root `settings.gradle.kts`.
+- **Fix:** `app/build.gradle.kts` now declares plugin versions explicitly and `app/settings.gradle.kts`
+  supplies `google()`, `mavenCentral()`, and `gradlePluginPortal()` for standalone IDE import.
+  Verified both root `.\gradlew.bat :app:prepareKotlinBuildScriptModel :app:compileDebugKotlin`
+  and app-dir `..\gradlew.bat prepareKotlinBuildScriptModel compileDebugKotlin` **BUILD SUCCESSFUL**.
+
 ## Session checkpoint — 2026-04-30 (explorer filteredTree + agent apply/revert)
 
 - **Done:** **`IdeViewModel`**: `explorerTreeFilterQuery`, `setExplorerTreeFilterQuery`, **`filteredTree`**
