@@ -11,6 +11,7 @@ import com.tabletaide.ide.data.PersistedTab
 import com.tabletaide.ide.data.TreeRow
 import com.tabletaide.ide.data.WorkspaceMutationBus
 import com.tabletaide.ide.data.WorkspaceRepository
+import com.tabletaide.ide.ui.theme.KineticThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
@@ -55,9 +56,16 @@ class IdeViewModel @Inject constructor(
     private val explorerPins: ExplorerPinsStore,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
+    private val uiPrefs by lazy {
+        appContext.getSharedPreferences("kinetic_ui_settings", Context.MODE_PRIVATE)
+    }
+    private val themeModeKey = "theme_mode"
 
     val explorerRecents: StateFlow<List<String>> = explorerPins.recents
     val explorerFavorites: StateFlow<List<String>> = explorerPins.favorites
+
+    private val _themeMode = MutableStateFlow(loadThemeMode())
+    val themeMode: StateFlow<KineticThemeMode> = _themeMode.asStateFlow()
 
     private val _tabs = MutableStateFlow<List<EditorTab>>(emptyList())
     val tabs: StateFlow<List<EditorTab>> = _tabs.asStateFlow()
@@ -151,6 +159,13 @@ class IdeViewModel @Inject constructor(
 
     fun setRailSection(section: RailSection) {
         _railSection.value = section
+    }
+
+    fun setThemeMode(mode: KineticThemeMode) {
+        if (_themeMode.value == mode) return
+        uiPrefs.edit().putString(themeModeKey, mode.id).apply()
+        _themeMode.value = mode
+        _status.value = "Theme: ${mode.displayName}"
     }
 
     fun setExplorerTreeFilterQuery(query: String) {
@@ -728,5 +743,10 @@ class IdeViewModel @Inject constructor(
         return appContext.contentResolver.persistedUriPermissions.any {
             it.uri?.toString() == uriStr && it.isReadPermission && it.isWritePermission
         }
+    }
+
+    private fun loadThemeMode(): KineticThemeMode {
+        val id = uiPrefs.getString(themeModeKey, null)
+        return KineticThemeMode.entries.find { it.id == id } ?: KineticThemeMode.DARK
     }
 }

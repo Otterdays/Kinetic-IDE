@@ -37,9 +37,9 @@ text box."
   - [x] Fuzzy tree search **[MVP — explorer filter field, ordered-char fuzzy match + ancestor paths]**
 - **Epic 1.3 — Tablet UX**
   - [x] Split-pane + presets **[partial — draggable divider + snap-to-preset on drag end + palette fractions 70/30 · 50/50 · 30/70; fling snap gestures still `[ ]`]**
-  - [x] External keyboard shortcuts **[partial — Ctrl+P palette; Ctrl+S / Ctrl+Shift+S / Ctrl+W; full shortcut layer still `[ ]`]**
+  - [x] External keyboard shortcuts **[partial — Ctrl+P palette; Ctrl+S / Ctrl+Shift+S / Ctrl+W; Ctrl+Tab / Ctrl+Shift+Tab tab cycle; full shortcut layer still `[ ]`]**
   - [ ] Stylus-friendly selection tuning
-  - [ ] Theme modes (studio high-contrast)
+  - [x] Theme modes **[partial — Dark / Light / High Contrast via settings dialog + command palette; additional per-pane/accessibility polish still `[ ]`]**
   - [x] Command palette **[partial — filtered palette + primary actions; not yet “all primary actions”]**
 
 ### Phase 2 — Agent V1 + developer trust *(partial MVP; see granular § below)*

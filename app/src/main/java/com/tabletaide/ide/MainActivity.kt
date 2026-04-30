@@ -7,7 +7,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.tabletaide.ide.ui.IdeViewModel
 import com.tabletaide.ide.ui.TabletIdeScreen
 import com.tabletaide.ide.ui.theme.KineticTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -18,12 +22,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            KineticTheme {
+            val ideVm: IdeViewModel = hiltViewModel()
+            val themeMode by ideVm.themeMode.collectAsState()
+            KineticTheme(mode = themeMode) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    TabletIdeScreen()
+                    TabletIdeScreen(ideVm = ideVm)
                 }
             }
         }

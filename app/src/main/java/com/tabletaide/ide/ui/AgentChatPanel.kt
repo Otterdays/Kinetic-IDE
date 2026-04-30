@@ -17,9 +17,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -68,6 +68,7 @@ fun AgentChatPanel(
     var providerMenuOpen by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
     val hasSelectedProviderKey = credentials.hasKey(currentProvider)
+    val sendEnabled = !busy && draft.isNotBlank() && hasSelectedProviderKey
     val providerLabel = if (hasSelectedProviderKey) {
         currentProvider.displayName
     } else {
@@ -152,7 +153,7 @@ fun AgentChatPanel(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    "ASSISTANT STATUS",
+                    "ASSISTANT STATUS · ${providerLabel.uppercase()}",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp,
@@ -389,10 +390,14 @@ fun AgentChatPanel(
                 )
                 IconButton(
                     onClick = {
+                        if (!hasSelectedProviderKey) {
+                            onOpenApiKeys()
+                            return@IconButton
+                        }
                         onSend(draft)
                         draft = ""
                     },
-                    enabled = !busy && draft.isNotBlank(),
+                    enabled = sendEnabled,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(8.dp)
@@ -403,7 +408,7 @@ fun AgentChatPanel(
                             ),
                         ),
                 ) {
-                    Icon(Icons.Default.Send, null, tint = KineticColors.onPrimaryFixed)
+                    Icon(Icons.AutoMirrored.Filled.Send, null, tint = KineticColors.onPrimaryFixed)
                 }
             }
         }

@@ -61,11 +61,13 @@ class AgentViewModel @Inject constructor(
     fun setProvider(provider: LlmProvider) {
         providerStore.setProvider(provider)
         _provider.value = provider
+        _error.value = null
     }
 
     fun setApiKey(provider: LlmProvider, apiKey: String) {
         providerStore.setApiKey(provider, apiKey)
         _credentials.value = providerStore.getCredentialState()
+        _error.value = null
     }
 
     fun sendUserMessage(text: String, systemPromptAppendix: String = "") {
@@ -76,17 +78,22 @@ class AgentViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            _busy.value = true
-            _error.value = null
-            appendUserLine(trimmed)
-            val userContent = JSONArray().put(
-                JSONObject().put("type", "text").put("text", trimmed),
-            )
-            apiHistory.put(
-                JSONObject().put("role", "user").put("content", userContent),
-            )
-            runAgentRounds(systemPromptAppendix.trim())
-            _busy.value = false
+            try {
+                _busy.value = true
+                _error.value = null
+                appendUserLine(trimmed)
+                val userContent = JSONArray().put(
+                    JSONObject().put("type", "text").put("text", trimmed),
+                )
+                apiHistory.put(
+                    JSONObject().put("role", "user").put("content", userContent),
+                )
+                runAgentRounds(systemPromptAppendix.trim())
+            } catch (e: Exception) {
+                _error.value = e.message ?: "Unexpected agent failure."
+            } finally {
+                _busy.value = false
+            }
         }
     }
 

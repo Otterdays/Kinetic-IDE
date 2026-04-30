@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **[ROADMAP Epic 1.3] Theme modes:** Added persisted app appearance modes
+  (**Dark / Light / High Contrast**) via `IdeViewModel` + `KineticTheme` selector.
+  Settings gear opens a theme dialog; command palette adds direct theme actions.
+
+- **[ROADMAP Epic 1.3] Tab-cycle UX:** Added keyboard tab cycling
+  (**Ctrl+Tab / Ctrl+Shift+Tab**) and matching command-palette actions
+  (**Next tab** / **Previous tab**).
+
 - **Gradle memory fix for standalone app import:** added `app/gradle.properties` with
   `org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8` (plus standard
   Android/Kotlin flags) so IDE runs targeting `app/` do not use the default 512 MiB heap and trigger

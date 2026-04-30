@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -52,6 +53,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.tabletaide.ide.data.LlmCredentialState
 import com.tabletaide.ide.data.LlmProvider
+import com.tabletaide.ide.ui.theme.KineticThemeMode
 import kotlinx.coroutines.launch
 
 private fun clampEditorAgentFraction(value: Float): Float = value.coerceIn(0.22f, 0.82f)
@@ -83,6 +85,7 @@ fun TabletIdeScreen(
     val canRedoNow = remember(undoRedoEpoch, tabs, selectedTabIndex) {
         ideVm.canRedo()
     }
+    val themeMode by ideVm.themeMode.collectAsState()
 
     val chatLines by agentVm.lines.collectAsState()
     val busy by agentVm.busy.collectAsState()
@@ -114,6 +117,7 @@ fun TabletIdeScreen(
     var commandPaletteVisible by remember { mutableStateOf(false) }
     var commandPaletteQuery by remember { mutableStateOf("") }
     var apiKeysDialogVisible by remember { mutableStateOf(false) }
+    var themeDialogVisible by remember { mutableStateOf(false) }
     var editorAgentFraction by rememberSaveable { mutableFloatStateOf(0.65f) }
 
     DisposableEffect(lifecycleOwner) {
@@ -183,6 +187,26 @@ fun TabletIdeScreen(
                 onInvoke = { ideVm.saveAllDirtyTabs() },
             ),
             PaletteCommand(
+                title = "Next tab",
+                subtitle = "Cycle editor tabs forward",
+                keywords = listOf("next", "tab", "cycle", "forward"),
+                enabled = tabs.size > 1,
+                onInvoke = {
+                    val next = (selectedTabIndex + 1).mod(tabs.size)
+                    ideVm.selectTab(next)
+                },
+            ),
+            PaletteCommand(
+                title = "Previous tab",
+                subtitle = "Cycle editor tabs backward",
+                keywords = listOf("previous", "tab", "cycle", "back"),
+                enabled = tabs.size > 1,
+                onInvoke = {
+                    val prev = if (selectedTabIndex - 1 < 0) tabs.lastIndex else selectedTabIndex - 1
+                    ideVm.selectTab(prev)
+                },
+            ),
+            PaletteCommand(
                 title = "Undo",
                 subtitle = "Active buffer",
                 keywords = listOf("undo"),
@@ -209,6 +233,27 @@ fun TabletIdeScreen(
                 keywords = listOf("api", "key", "keys", "llm", "provider", "ai"),
                 enabled = !busy,
                 onInvoke = { apiKeysDialogVisible = true },
+            ),
+            PaletteCommand(
+                title = "Theme: Dark",
+                subtitle = "Studio dark mode",
+                keywords = listOf("theme", "dark", "ui", "appearance"),
+                enabled = themeMode != KineticThemeMode.DARK,
+                onInvoke = { ideVm.setThemeMode(KineticThemeMode.DARK) },
+            ),
+            PaletteCommand(
+                title = "Theme: Light",
+                subtitle = "Bright workspace mode",
+                keywords = listOf("theme", "light", "ui", "appearance"),
+                enabled = themeMode != KineticThemeMode.LIGHT,
+                onInvoke = { ideVm.setThemeMode(KineticThemeMode.LIGHT) },
+            ),
+            PaletteCommand(
+                title = "Theme: High contrast",
+                subtitle = "Extra visual contrast",
+                keywords = listOf("theme", "contrast", "accessibility", "ui"),
+                enabled = themeMode != KineticThemeMode.HIGH_CONTRAST,
+                onInvoke = { ideVm.setThemeMode(KineticThemeMode.HIGH_CONTRAST) },
             ),
             PaletteCommand(
                 title = "Clear agent chat",
@@ -308,6 +353,16 @@ fun TabletIdeScreen(
             },
         )
     }
+    if (themeDialogVisible) {
+        ThemeModeDialog(
+            current = themeMode,
+            onDismiss = { themeDialogVisible = false },
+            onSelect = { mode ->
+                ideVm.setThemeMode(mode)
+                themeDialogVisible = false
+            },
+        )
+    }
 
     Box(
         modifier = Modifier
@@ -315,7 +370,9 @@ fun TabletIdeScreen(
             .background(MaterialTheme.colorScheme.background)
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                if (commandPaletteVisible || apiKeysDialogVisible) return@onPreviewKeyEvent false
+                if (commandPaletteVisible || apiKeysDialogVisible || themeDialogVisible) {
+                    return@onPreviewKeyEvent false
+                }
                 when {
                     e.key == Key.P && e.isCtrlPressed -> {
                         commandPaletteVisible = true
@@ -327,6 +384,15 @@ fun TabletIdeScreen(
                     }
                     e.key == Key.W && e.isCtrlPressed -> {
                         if (tabs.isNotEmpty()) requestCloseTab(selectedTabIndex)
+                        true
+                    }
+                    e.key == Key.Tab && e.isCtrlPressed && tabs.size > 1 -> {
+                        val next = if (e.isShiftPressed) {
+                            if (selectedTabIndex - 1 < 0) tabs.lastIndex else selectedTabIndex - 1
+                        } else {
+                            (selectedTabIndex + 1).mod(tabs.size)
+                        }
+                        ideVm.selectTab(next)
                         true
                     }
                     else -> false
@@ -342,6 +408,7 @@ fun TabletIdeScreen(
                 onExtensionsStub = {
                     scope.launch { snackbar.showSnackbar("Extensions — coming soon") }
                 },
+                onOpenSettings = { themeDialogVisible = true },
             )
             if (railSection != RailSection.Search && railSection != RailSection.Extensions) {
                 FileTreePane(
@@ -482,6 +549,44 @@ fun TabletIdeScreen(
             },
         )
     }
+}
+
+@Composable
+private fun ThemeModeDialog(
+    current: KineticThemeMode,
+    onDismiss: () -> Unit,
+    onSelect: (KineticThemeMode) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Theme mode") },
+        text = {
+            Column {
+                KineticThemeMode.entries.forEach { mode ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = current == mode,
+                            onClick = { onSelect(mode) },
+                        )
+                        TextButton(onClick = { onSelect(mode) }) {
+                            Text(mode.displayName)
+                        }
+                    }
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        },
+        confirmButton = {},
+    )
 }
 
 @Composable

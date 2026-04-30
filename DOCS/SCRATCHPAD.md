@@ -2,6 +2,28 @@
 
 # SCRATCHPAD — Kinetic
 
+## Session checkpoint — 2026-04-30 (AI IDE QoL + edge hardening)
+
+- **Done:** AI Architect send affordance is now key-aware and less brittle:
+  `sendEnabled = !busy && draft.isNotBlank() && hasSelectedProviderKey` in `AgentChatPanel`.
+- **Done:** Status header now includes current neutral/provider label (`ASSISTANT STATUS · ...`) so the user
+  sees context even before first message; no forced provider branding when no key exists.
+- **Done:** `AgentViewModel.sendUserMessage` wrapped with `try/catch/finally` so unexpected failures cannot
+  leave the panel stuck in busy state; explicit fallback error emitted.
+- **Done:** Clearing stale errors on provider/key updates (`setProvider`, `setApiKey`) so credential fixes
+  immediately recover UX without requiring extra actions.
+- **Done:** Compose deprecation cleanup in `AgentChatPanel` (`Icons.AutoMirrored.Filled.Send`).
+- **Verify:** `./gradlew.bat :app:compileDebugKotlin` **BUILD SUCCESSFUL**.
+
+## Session checkpoint — 2026-04-30 (theme modes UX)
+
+- **Done:** Implemented roadmap Epic 1.3 theme modes: `KineticThemeMode` (Dark/Light/High Contrast),
+  `KineticTheme(mode=...)` color-scheme switching, persisted `IdeViewModel.themeMode` in
+  `kinetic_ui_settings` prefs, Settings-gear theme dialog, and command-palette theme actions.
+  `MainActivity` now binds theme from `IdeViewModel` so mode applies app-wide. Added editor tab
+  cycling shortcuts (`Ctrl+Tab` / `Ctrl+Shift+Tab`) and palette actions (`Next tab`, `Previous tab`).
+- **Verify:** `./gradlew.bat :app:compileDebugKotlin` **BUILD SUCCESSFUL**.
+
 ## Session checkpoint — 2026-04-30 (AI Architect provider label + key gate)
 
 - **Issue:** AI Architect header showed provider branding ("Claude") on first open, which looked hardcoded

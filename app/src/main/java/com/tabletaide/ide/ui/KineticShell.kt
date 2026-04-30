@@ -56,6 +56,7 @@ fun KineticNavRail(
     /** Command palette / quick search — does not switch rail section */
     onSearch: () -> Unit,
     onExtensionsStub: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     NavigationRail(
@@ -125,7 +126,7 @@ fun KineticNavRail(
         }
         NavigationRailItem(
             selected = false,
-            onClick = { /* settings stub */ },
+            onClick = onOpenSettings,
             icon = { Icon(Icons.Default.Settings, null) },
             label = { RailLabel("Settings") },
             colors = NavigationRailItemDefaults.colors(

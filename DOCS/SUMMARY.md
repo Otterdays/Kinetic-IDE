@@ -80,3 +80,7 @@
 *[2026-04-30]: [AMENDED] App-module Gradle import compatibility: `app/build.gradle.kts` declares plugin versions and `app/settings.gradle.kts` provides repositories so importing `app/` directly resolves Android/KSP/Hilt/Compose plugins.*
 
 *[2026-04-30]: [AMENDED] Standalone `app/` Gradle memory guard: `app/gradle.properties` sets `org.gradle.jvmargs` to 2G heap + 512m metaspace to avoid daemon GC-thrashing under IDE app-module runs.*
+
+*[2026-04-30]: [AMENDED] UI polish: theme modes shipped (Dark / Light / High Contrast), persisted in `IdeViewModel`, selectable from Settings gear and command palette.*
+
+*[2026-04-30]: [AMENDED] Editor workflow polish: tab-cycle shortcuts (`Ctrl+Tab` / `Ctrl+Shift+Tab`) and command-palette actions for next/previous tab.*
