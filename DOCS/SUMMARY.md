@@ -84,3 +84,7 @@
 *[2026-04-30]: [AMENDED] UI polish: theme modes shipped (Dark / Light / High Contrast), persisted in `IdeViewModel`, selectable from Settings gear and command palette.*
 
 *[2026-04-30]: [AMENDED] Editor workflow polish: tab-cycle shortcuts (`Ctrl+Tab` / `Ctrl+Shift+Tab`) and command-palette actions for next/previous tab.*
+
+*[2026-05-13]: [AMENDED] Startup Gateway MVP shipped: launch now routes to a dedicated welcome dashboard only when no restorable session/workspace exists; returning sessions still resume directly into the IDE shell. Gateway adds `New Project`, `Open Folder`, `Clone Repository` placeholder flow, and recent workspaces via `RecentWorkspacesStore`.*
+
+*[2026-05-13]: [AMENDED] New starter project setup flow added in `WorkspaceRepository.createStarterProject` with three minimal templates (`Blank workspace`, `Kotlin console`, `Web starter`) opened immediately after creation.*

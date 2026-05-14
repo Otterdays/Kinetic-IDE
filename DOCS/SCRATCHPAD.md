@@ -2,6 +2,33 @@
 
 # SCRATCHPAD — Kinetic
 
+## Session checkpoint — 2026-05-13 (startup gateway MVP shipped)
+
+- **Done:** Added a conditional startup route for `MainActivity` / `IdeViewModel`: restoreable sessions
+  still enter the IDE shell directly; otherwise the app now lands on a dedicated startup gateway.
+- **Done:** Added `RecentWorkspacesStore` plus gateway recent-workspace reopen flow; successful
+  restore/open actions now refresh recent workspaces independently of editor session snapshots.
+- **Done:** Added startup UI surface (`StartupGatewayScreen`) with `New Project`, `Open Folder`,
+  `Clone Repository`, and recent workspaces, plus shared SAF picker plumbing reusable by the gateway
+  and the shell.
+- **Done:** Added starter project creation (`Blank workspace`, `Kotlin console`, `Web starter`) via
+  `WorkspaceRepository.createStarterProject`, creating a real folder structure then opening it.
+- **Done:** Added validated clone placeholder dialog with repository URL + destination selection and
+  explicit staged messaging for later git implementation.
+- **Verify:** `..\gradlew.bat compileDebugKotlin` from `app/` **BUILD SUCCESSFUL**.
+- **Note:** Root build path still inherits a machine-specific stale `org.gradle.java.home` from
+  `gradle.properties`; app-module standalone verification succeeded without changing repo config.
+
+## Session checkpoint — 2026-05-13 (startup gateway MVP in progress)
+
+- **In progress:** Startup Gateway MVP implementation from attached plan. Current sequence:
+  launch routing/state first, then recent workspaces, then gateway UI, then new-project wizard,
+  then clone placeholder polish.
+- **Intent:** Keep cold-start resume behavior for existing sessions and only show the welcome
+  gateway when no restorable workspace/session exists.
+- **Next:** Add shared workspace picker plumbing plus `IdeViewModel` startup route state before
+  building the dedicated gateway surface.
+
 ## Session checkpoint — 2026-04-30 (AI IDE QoL + edge hardening)
 
 - **Done:** AI Architect send affordance is now key-aware and less brittle:

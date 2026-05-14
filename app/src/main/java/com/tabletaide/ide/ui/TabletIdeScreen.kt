@@ -1,9 +1,5 @@
 package com.tabletaide.ide.ui
 
-import android.app.Activity
-import android.content.Intent
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -43,7 +39,6 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
@@ -108,7 +103,6 @@ fun TabletIdeScreen(
         ),
     )
 
-    val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -130,26 +124,7 @@ fun TabletIdeScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val openTreeLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
-        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
-        val uri = result.data?.data ?: return@rememberLauncherForActivityResult
-        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-        try {
-            context.contentResolver.takePersistableUriPermission(uri, flags)
-        } catch (_: SecurityException) { }
-        ideVm.openWorkspaceRoot(uri)
-    }
-
-    fun openFolder() {
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
-        }
-        openTreeLauncher.launch(intent)
-    }
+    val openFolder = rememberWorkspaceTreePicker(onTreePicked = ideVm::openWorkspaceRoot)
 
     val paletteCommands = remember(
         tabs.size,
@@ -164,7 +139,7 @@ fun TabletIdeScreen(
                 title = "Open workspace",
                 subtitle = "Pick a folder (SAF)",
                 keywords = listOf("open", "folder", "saf", "project"),
-                onInvoke = { openFolder() },
+                onInvoke = openFolder,
             ),
             PaletteCommand(
                 title = "Focus explorer",
@@ -403,7 +378,7 @@ fun TabletIdeScreen(
             KineticNavRail(
                 section = railSection,
                 onSection = ideVm::setRailSection,
-                onOpenWorkspace = { openFolder() },
+                onOpenWorkspace = openFolder,
                 onSearch = { commandPaletteVisible = true },
                 onExtensionsStub = {
                     scope.launch { snackbar.showSnackbar("Extensions — coming soon") }
@@ -419,7 +394,7 @@ fun TabletIdeScreen(
                     favoritePaths = explorerFavoritesList,
                     recentPaths = explorerRecentsList,
                     hasWorkspaceRoot = ideVm.hasWorkspaceRoot(),
-                    onOpenWorkspace = { openFolder() },
+                    onOpenWorkspace = openFolder,
                     onSelectFile = ideVm::openOrSelectFile,
                     onOpenPinnedPath = ideVm::openExplorerPinnedPath,
                     onToggleFavoritePath = ideVm::toggleExplorerFavorite,

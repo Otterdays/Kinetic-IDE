@@ -2,6 +2,7 @@ package com.tabletaide.ide.data
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +35,51 @@ class WorkspaceRepository @Inject constructor(
     fun rootTreeUriOrNull(): Uri? = rootTreeUri
 
     fun rootOrNull(): DocumentFile? = root
+
+    fun displayNameForTreeUri(treeUri: Uri): String =
+        DocumentFile.fromTreeUri(appContext, treeUri)?.name?.trim().orEmpty()
+            .ifEmpty { "Workspace" }
+
+    suspend fun createStarterProject(
+        parentTreeUri: Uri,
+        projectName: String,
+        template: StarterProjectTemplate,
+    ): Result<Uri> = mutex.withLock {
+        withContext(Dispatchers.IO) {
+            try {
+                val safeProjectName = sanitizeLeafName(projectName)
+                    ?: return@withContext Result.failure(
+                        IllegalArgumentException("Invalid project name"),
+                    )
+                val parent = DocumentFile.fromTreeUri(appContext, parentTreeUri)
+                    ?: return@withContext Result.failure(
+                        IllegalStateException("Cannot access selected location"),
+                    )
+                if (!parent.isDirectory) {
+                    return@withContext Result.failure(
+                        IllegalStateException("Selected location is not a folder"),
+                    )
+                }
+                if (parent.findFile(safeProjectName) != null) {
+                    return@withContext Result.failure(
+                        IllegalStateException("Project already exists: $safeProjectName"),
+                    )
+                }
+                val projectRoot = parent.createDirectory(safeProjectName)
+                    ?: return@withContext Result.failure(
+                        IllegalStateException("Cannot create project folder"),
+                    )
+                seedStarterProject(projectRoot, safeProjectName, template)
+                val projectTreeUri = buildTreeUri(projectRoot)
+                    ?: return@withContext Result.failure(
+                        IllegalStateException("Cannot open new project folder"),
+                    )
+                Result.success(projectTreeUri)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
 
     suspend fun readText(relativePath: String): Result<String> = mutex.withLock {
         withContext(Dispatchers.IO) {
@@ -315,6 +361,193 @@ class WorkspaceRepository @Inject constructor(
             }
         }
         return doc.delete()
+    }
+
+    private fun buildTreeUri(doc: DocumentFile): Uri? {
+        val authority = doc.uri.authority ?: return null
+        val documentId = DocumentsContract.getDocumentId(doc.uri)
+        return DocumentsContract.buildTreeDocumentUri(authority, documentId)
+    }
+
+    private fun ensureChildDirectory(root: DocumentFile, relativePath: String): DocumentFile? {
+        var current = root
+        for (segment in relativePath.split('/').filter { it.isNotBlank() }) {
+            val existing = current.findFile(segment)
+            current = when {
+                existing != null && existing.isDirectory -> existing
+                existing != null -> return null
+                else -> current.createDirectory(segment) ?: return null
+            }
+        }
+        return current
+    }
+
+    private fun seedStarterProject(
+        projectRoot: DocumentFile,
+        projectName: String,
+        template: StarterProjectTemplate,
+    ) {
+        starterProjectFiles(projectName, template).forEach { (relativePath, content) ->
+            val parentPath = relativePath.substringBeforeLast('/', "")
+            val leafName = relativePath.substringAfterLast('/')
+            val parent = if (parentPath.isEmpty()) {
+                projectRoot
+            } else {
+                ensureChildDirectory(projectRoot, parentPath)
+                    ?: throw IllegalStateException("Cannot create folder: $parentPath")
+            }
+            val file = parent.findFile(leafName) ?: parent.createFile(mimeTypeFor(leafName), leafName)
+            ?: throw IllegalStateException("Cannot create file: $relativePath")
+            appContext.contentResolver.openOutputStream(file.uri, "wt")?.use { out ->
+                OutputStreamWriter(out, Charsets.UTF_8).use { writer ->
+                    writer.write(content)
+                }
+            } ?: throw IllegalStateException("Cannot write file: $relativePath")
+        }
+    }
+
+    private fun starterProjectFiles(
+        projectName: String,
+        template: StarterProjectTemplate,
+    ): Map<String, String> = when (template) {
+        StarterProjectTemplate.BLANK -> linkedMapOf(
+            "README.md" to """
+                # $projectName
+
+                Created with Kinetic.
+
+                ## Structure
+
+                - `src/` for source files
+                - `notes/` for docs and planning
+            """.trimIndent(),
+            ".gitignore" to """
+                .DS_Store
+                *.log
+                node_modules/
+                dist/
+                build/
+            """.trimIndent(),
+            "src/.gitkeep" to "",
+            "notes/.gitkeep" to "",
+        )
+        StarterProjectTemplate.KOTLIN_CONSOLE -> linkedMapOf(
+            "README.md" to """
+                # $projectName
+
+                Simple Kotlin console starter created with Kinetic.
+
+                ## Entry point
+
+                `src/main/kotlin/Main.kt`
+            """.trimIndent(),
+            ".gitignore" to """
+                .DS_Store
+                *.log
+                build/
+                out/
+            """.trimIndent(),
+            "src/main/kotlin/Main.kt" to """
+                fun main() {
+                    println("Hello from $projectName")
+                }
+            """.trimIndent(),
+        )
+        StarterProjectTemplate.WEB_APP -> linkedMapOf(
+            "README.md" to """
+                # $projectName
+
+                Small web starter created with Kinetic.
+
+                Open `src/index.html` in a browser to begin iterating.
+            """.trimIndent(),
+            ".gitignore" to """
+                .DS_Store
+                *.log
+                node_modules/
+                dist/
+            """.trimIndent(),
+            "src/index.html" to """
+                <!doctype html>
+                <html lang="en">
+                  <head>
+                    <meta charset="utf-8" />
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                    <title>$projectName</title>
+                    <link rel="stylesheet" href="./styles.css" />
+                  </head>
+                  <body>
+                    <main class="app-shell">
+                      <h1>$projectName</h1>
+                      <p>Start editing <code>src/index.html</code> and <code>src/main.js</code>.</p>
+                      <button id="hello-button">Say hello</button>
+                      <pre id="output"></pre>
+                    </main>
+                    <script src="./main.js"></script>
+                  </body>
+                </html>
+            """.trimIndent(),
+            "src/styles.css" to """
+                :root {
+                  color-scheme: dark;
+                  font-family: Inter, Arial, sans-serif;
+                  background: #0b1020;
+                  color: #ecf2ff;
+                }
+
+                body {
+                  margin: 0;
+                  min-height: 100vh;
+                  display: grid;
+                  place-items: center;
+                  background: radial-gradient(circle at top, #1e2a52, #0b1020 60%);
+                }
+
+                .app-shell {
+                  width: min(560px, calc(100vw - 32px));
+                  padding: 32px;
+                  border-radius: 24px;
+                  background: rgba(11, 18, 32, 0.88);
+                  border: 1px solid rgba(129, 236, 255, 0.25);
+                  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+                }
+
+                button {
+                  margin-top: 16px;
+                  border: 0;
+                  border-radius: 999px;
+                  padding: 10px 16px;
+                  background: #81ecff;
+                  color: #06242d;
+                  font-weight: 700;
+                  cursor: pointer;
+                }
+
+                pre {
+                  margin-top: 16px;
+                  white-space: pre-wrap;
+                }
+            """.trimIndent(),
+            "src/main.js" to """
+                const button = document.getElementById("hello-button");
+                const output = document.getElementById("output");
+
+                if (button && output) {
+                  button.addEventListener("click", () => {
+                    output.textContent = "Hello from $projectName";
+                  });
+                }
+            """.trimIndent(),
+        )
+    }
+
+    private fun mimeTypeFor(name: String): String = when (name.substringAfterLast('.', "")) {
+        "html" -> "text/html"
+        "css" -> "text/css"
+        "js" -> "application/javascript"
+        "json" -> "application/json"
+        "md", "txt", "kt" -> "text/plain"
+        else -> "text/plain"
     }
 }
 

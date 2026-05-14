@@ -8,6 +8,9 @@ import com.tabletaide.ide.data.EditorSessionStore
 import com.tabletaide.ide.data.ExplorerPinsStore
 import com.tabletaide.ide.data.PersistedEditorSnapshot
 import com.tabletaide.ide.data.PersistedTab
+import com.tabletaide.ide.data.RecentWorkspaceEntry
+import com.tabletaide.ide.data.RecentWorkspacesStore
+import com.tabletaide.ide.data.StarterProjectTemplate
 import com.tabletaide.ide.data.TreeRow
 import com.tabletaide.ide.data.WorkspaceMutationBus
 import com.tabletaide.ide.data.WorkspaceRepository
@@ -41,6 +44,7 @@ data class EditorTab(
 }
 
 enum class RailSection { Projects, Explorer, Search, Extensions }
+enum class AppLaunchSurface { BOOTING, STARTUP_GATEWAY, IDE_SHELL }
 
 private const val UndoDebounceMs = 450L
 private const val AutosaveIntervalMs = 45_000L
@@ -54,6 +58,7 @@ class IdeViewModel @Inject constructor(
     mutationBus: WorkspaceMutationBus,
     private val sessionStore: EditorSessionStore,
     private val explorerPins: ExplorerPinsStore,
+    private val recentWorkspacesStore: RecentWorkspacesStore,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
     private val uiPrefs by lazy {
@@ -63,9 +68,13 @@ class IdeViewModel @Inject constructor(
 
     val explorerRecents: StateFlow<List<String>> = explorerPins.recents
     val explorerFavorites: StateFlow<List<String>> = explorerPins.favorites
+    val recentWorkspaces: StateFlow<List<RecentWorkspaceEntry>> = recentWorkspacesStore.entries
 
     private val _themeMode = MutableStateFlow(loadThemeMode())
     val themeMode: StateFlow<KineticThemeMode> = _themeMode.asStateFlow()
+
+    private val _appLaunchSurface = MutableStateFlow(AppLaunchSurface.BOOTING)
+    val appLaunchSurface: StateFlow<AppLaunchSurface> = _appLaunchSurface.asStateFlow()
 
     private val _tabs = MutableStateFlow<List<EditorTab>>(emptyList())
     val tabs: StateFlow<List<EditorTab>> = _tabs.asStateFlow()
@@ -120,7 +129,13 @@ class IdeViewModel @Inject constructor(
                 persistDraftIfPossible()
             }
         }
-        tryRestorePersistedSession()
+        recentWorkspacesStore.pruneUnavailable(validPersistedWorkspaceUris())
+        val restored = tryRestorePersistedSession()
+        _appLaunchSurface.value = if (restored) {
+            AppLaunchSurface.IDE_SHELL
+        } else {
+            AppLaunchSurface.STARTUP_GATEWAY
+        }
         explorerPins.bindWorkspace(workspace.rootTreeUriOrNull())
     }
 
@@ -248,21 +263,24 @@ class IdeViewModel @Inject constructor(
         redoByPath.clear()
         workspace.setRootFromUri(treeUri)
         explorerPins.bindWorkspace(treeUri)
+        recentWorkspacesStore.recordWorkspace(treeUri, workspace.displayNameForTreeUri(treeUri))
         refreshTree()
         _tabs.value = emptyList()
         _selectedTabIndex.value = 0
         _status.value = "Workspace opened"
         _railSection.value = RailSection.Explorer
+        _appLaunchSurface.value = AppLaunchSurface.IDE_SHELL
         bumpUndoRedo()
         persistDraftIfPossible()
     }
 
     /** Best-effort session restore ([TRACE: DOCS/ROADMAP.md] Epic 1.1 crash-safe drafts). */
-    fun tryRestorePersistedSession() {
-        val snapshot = sessionStore.loadSnapshotOrNull() ?: return
-        if (!_hasPersistPermission(snapshot.workspaceUri)) return
+    fun tryRestorePersistedSession(): Boolean {
+        val snapshot = sessionStore.loadSnapshotOrNull() ?: return false
+        if (!_hasPersistPermission(snapshot.workspaceUri)) return false
         val uri = Uri.parse(snapshot.workspaceUri)
         workspace.setRootFromUri(uri)
+        recentWorkspacesStore.recordWorkspace(uri, workspace.displayNameForTreeUri(uri))
         refreshTree()
         val restored = snapshot.tabs.map { row ->
             EditorTab(
@@ -292,6 +310,32 @@ class IdeViewModel @Inject constructor(
         bumpUndoRedo()
         if (restored.isNotEmpty()) {
             _status.value = "Restored previous session (${restored.size} buffers)"
+        }
+        return true
+    }
+
+    fun openRecentWorkspace(uriString: String) {
+        if (!_hasPersistPermission(uriString)) {
+            recentWorkspacesStore.removeWorkspace(uriString)
+            _status.value = "Workspace permission expired. Pick the folder again."
+            return
+        }
+        openWorkspaceRoot(Uri.parse(uriString))
+    }
+
+    fun createStarterProject(
+        parentTreeUri: Uri,
+        projectName: String,
+        template: StarterProjectTemplate,
+    ) {
+        viewModelScope.launch {
+            workspace.createStarterProject(parentTreeUri, projectName, template).fold(
+                onSuccess = { projectTreeUri ->
+                    openWorkspaceRoot(projectTreeUri)
+                    _status.value = "Created project ${projectName.trim()}"
+                },
+                onFailure = { _status.value = it.message },
+            )
         }
     }
 
@@ -743,6 +787,13 @@ class IdeViewModel @Inject constructor(
         return appContext.contentResolver.persistedUriPermissions.any {
             it.uri?.toString() == uriStr && it.isReadPermission && it.isWritePermission
         }
+    }
+
+    private fun validPersistedWorkspaceUris(): Set<String> {
+        return appContext.contentResolver.persistedUriPermissions
+            .filter { it.isReadPermission && it.isWritePermission }
+            .map { it.uri.toString() }
+            .toSet()
     }
 
     private fun loadThemeMode(): KineticThemeMode {

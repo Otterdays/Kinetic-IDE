@@ -49,3 +49,4 @@
 - Source of truth: `settings.gradle.kts`, `app/build.gradle.kts`, `app/settings.gradle.kts`, `gradle/wrapper/gradle-wrapper.properties`.
 - Root repo policy: `FAIL_ON_PROJECT_REPOS` with `google()` and `mavenCentral()`.
 - 2026-04-30 theme-mode UI pass: no dependency or plugin version changes.
+- 2026-05-13 startup gateway MVP: no dependency or plugin version changes.

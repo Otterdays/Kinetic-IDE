@@ -10,6 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **[ROADMAP Startup Gateway MVP]** Added a conditional launch route: `MainActivity` now shows a
+  dedicated startup dashboard only when no restorable session/workspace exists, while returning users
+  still resume directly into the IDE shell. `StartupGatewayScreen` ships `New Project`, `Open Folder`,
+  `Clone Repository`, and `Recent Workspaces` entry points.
+
+- **[ROADMAP Startup Gateway MVP]** Added `RecentWorkspacesStore` (`SharedPreferences`) so opened or
+  restored workspaces appear in a launch-time recent list independent of editor-tab session restore.
+
+- **[ROADMAP Startup Gateway MVP]** Added starter project creation in `WorkspaceRepository` with
+  minimal templates (`Blank workspace`, `Kotlin console`, `Web starter`) plus a dedicated new-project
+  dialog that opens the created workspace immediately.
+
+- **[ROADMAP Startup Gateway MVP]** Added a validated clone-repository placeholder dialog with staged
+  messaging and destination picking, intentionally deferring real git clone execution to a later phase.
+
 - **[ROADMAP Epic 1.3] Theme modes:** Added persisted app appearance modes
   (**Dark / Light / High Contrast**) via `IdeViewModel` + `KineticTheme` selector.
   Settings gear opens a theme dialog; command palette adds direct theme actions.
