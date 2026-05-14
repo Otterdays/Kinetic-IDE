@@ -127,3 +127,5 @@
 *[2026-05-14]: [AMENDED] Agent telemetry MVP shipped: `AgentTelemetryStore` persists bounded `agent_telemetry.jsonl`, `AgentViewModel` emits session/turn/model/tool/approval/mutation/checkpoint/cost events, `AgentChatPanel` shows session rollup metrics, and `AgentTelemetryCodecTest` verifies summary math, JSON round-trip, and estimator source.
 
 *[2026-05-14]: [AMENDED] Persistent audit timeline shipped: `AgentAuditStore` persists every agent tool invocation to `agent_audit.jsonl`, and `AuditTimelinePanel` provides a dedicated dialog (command palette → Audit timeline) with expandable entry cards showing tool name, target, status, risk, policy, approval, duration, and mutation summary. This closes the "persistent audit log" slice from ROADMAP item #1 of the natural next slices; filter/sort and export remain future work.*
+
+*[2026-05-14]: Roadmap cleanup pass: `DOCS/ROADMAP.md` is now a concise front-and-center roadmap without amendment history, footnotes, or duplicated checklist clutter.*

@@ -198,6 +198,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Docs roadmap cleanup:** Rewrote `DOCS/ROADMAP.md` into a concise current-status roadmap with
+  clear shipped/partial/not-started lists, next slices, phases, milestones, and quality gates.
+  Removed amendment-note clutter from the roadmap itself.
+
 - **[ROADMAP Epic 1.2 / tree wrap-up]** Explorer filtering is still available, but it now sits on top
   of the incremental browse model: normal navigation loads root/expanded folders only, while query mode
   intentionally falls back to a full-tree scan for simpler fuzzy-match semantics.
