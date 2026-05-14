@@ -2,10 +2,34 @@ package com.tabletaide.ide.ui
 
 import android.content.Context
 import android.net.Uri
+import android.os.Environment
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tabletaide.ide.IdeConstants
+import com.tabletaide.ide.agent.GitCommitMessageService
+import com.tabletaide.ide.data.CloneTargetResolver
 import com.tabletaide.ide.data.EditorSessionStore
 import com.tabletaide.ide.data.ExplorerPinsStore
+import com.tabletaide.ide.data.GitCommitDialogState
+import com.tabletaide.ide.data.GitCommitRequest
+import com.tabletaide.ide.data.GitCommitService
+import com.tabletaide.ide.data.GitAuthStore
+import com.tabletaide.ide.data.GitCloneFailure
+import com.tabletaide.ide.data.GitCloneRequest
+import com.tabletaide.ide.data.GitCloneService
+import com.tabletaide.ide.data.GitCloneSuccess
+import com.tabletaide.ide.data.GitIdentity
+import com.tabletaide.ide.data.GitIdentityStore
+import com.tabletaide.ide.data.GitPushRequest
+import com.tabletaide.ide.data.GitPushService
+import com.tabletaide.ide.data.GitRepoUiState
+import com.tabletaide.ide.data.GitRepositoryReady
+import com.tabletaide.ide.data.GitRepositoryResolver
+import com.tabletaide.ide.data.GitRemoteSpec
+import com.tabletaide.ide.data.GitSavedAuthState
+import com.tabletaide.ide.data.GitStatusService
+import com.tabletaide.ide.data.GitStatusSnapshot
+import com.tabletaide.ide.data.SupportedCloneTarget
 import com.tabletaide.ide.data.PersistedEditorSnapshot
 import com.tabletaide.ide.data.PersistedTab
 import com.tabletaide.ide.data.RecentWorkspaceEntry
@@ -27,7 +51,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import com.tabletaide.ide.IdeConstants
 import javax.inject.Inject
 
 data class EditorTab(
@@ -59,7 +82,16 @@ class IdeViewModel @Inject constructor(
     private val sessionStore: EditorSessionStore,
     private val explorerPins: ExplorerPinsStore,
     private val recentWorkspacesStore: RecentWorkspacesStore,
-    @ApplicationContext private val appContext: Context,
+    private val gitAuthStore: GitAuthStore,
+    private val cloneTargetResolver: CloneTargetResolver,
+    private val gitCloneService: GitCloneService,
+    private val gitRepositoryResolver: GitRepositoryResolver,
+    private val gitStatusService: GitStatusService,
+    private val gitCommitService: GitCommitService,
+    private val gitPushService: GitPushService,
+    private val gitIdentityStore: GitIdentityStore,
+    private val gitCommitMessageService: GitCommitMessageService,
+    @param:ApplicationContext private val appContext: Context,
 ) : ViewModel() {
     private val uiPrefs by lazy {
         appContext.getSharedPreferences("kinetic_ui_settings", Context.MODE_PRIVATE)
@@ -72,6 +104,17 @@ class IdeViewModel @Inject constructor(
 
     private val _themeMode = MutableStateFlow(loadThemeMode())
     val themeMode: StateFlow<KineticThemeMode> = _themeMode.asStateFlow()
+
+    private val _cloneUiState = MutableStateFlow(GitCloneUiState())
+    val cloneUiState: StateFlow<GitCloneUiState> = _cloneUiState.asStateFlow()
+
+    private val _gitRepoState = MutableStateFlow(
+        GitRepoUiState(message = "Open a git repository root to use commit and push."),
+    )
+    val gitRepoState: StateFlow<GitRepoUiState> = _gitRepoState.asStateFlow()
+
+    private val _gitCommitDialogState = MutableStateFlow(GitCommitDialogState())
+    val gitCommitDialogState: StateFlow<GitCommitDialogState> = _gitCommitDialogState.asStateFlow()
 
     private val _appLaunchSurface = MutableStateFlow(AppLaunchSurface.BOOTING)
     val appLaunchSurface: StateFlow<AppLaunchSurface> = _appLaunchSurface.asStateFlow()
@@ -106,6 +149,9 @@ class IdeViewModel @Inject constructor(
     private val redoByPath = mutableMapOf<String, ArrayDeque<String>>()
     private val burstBaselineByPath = mutableMapOf<String, String>()
     private val burstJobs = mutableMapOf<String, Job>()
+    private var gitRefreshJob: Job? = null
+    private var gitRepository: GitRepositoryReady? = null
+    private var gitSnapshot: GitStatusSnapshot? = null
 
     init {
         mutationBus.writes
@@ -270,6 +316,8 @@ class IdeViewModel @Inject constructor(
         _status.value = "Workspace opened"
         _railSection.value = RailSection.Explorer
         _appLaunchSurface.value = AppLaunchSurface.IDE_SHELL
+        _cloneUiState.value = GitCloneUiState()
+        _gitCommitDialogState.value = GitCommitDialogState()
         bumpUndoRedo()
         persistDraftIfPossible()
     }
@@ -339,6 +387,346 @@ class IdeViewModel @Inject constructor(
         }
     }
 
+    fun peekSavedGitAuth(repoUrl: String): GitSavedAuthState? {
+        val remote = GitRemoteSpec.parseHttps(repoUrl) ?: return null
+        return gitAuthStore.peek(remote.host)
+    }
+
+    fun hasAllFilesAccess(): Boolean = Environment.isExternalStorageManager()
+
+    fun clearCloneFeedback() {
+        _cloneUiState.value = GitCloneUiState()
+    }
+
+    fun showCommitDialog(autoGenerateMessage: Boolean = false) {
+        viewModelScope.launch {
+            val state = resolveGitSnapshot(refreshUi = true) ?: run {
+                _status.value = _gitRepoState.value.message
+                return@launch
+            }
+            val (_, snapshot) = state
+            val identity = preferredIdentity(snapshot)
+            _gitCommitDialogState.value = GitCommitDialogState(
+                visible = true,
+                draftMessage = _gitCommitDialogState.value.draftMessage,
+                authorName = identity.name,
+                authorEmail = identity.email,
+                stageUntracked = true,
+            )
+            if (autoGenerateMessage && !snapshot.clean) {
+                generateCommitMessage()
+            }
+        }
+    }
+
+    fun hideCommitDialog() {
+        _gitCommitDialogState.value = GitCommitDialogState()
+    }
+
+    fun updateCommitDraftMessage(message: String) {
+        _gitCommitDialogState.update { it.copy(draftMessage = message) }
+    }
+
+    fun updateCommitAuthorName(name: String) {
+        _gitCommitDialogState.update { it.copy(authorName = name) }
+    }
+
+    fun updateCommitAuthorEmail(email: String) {
+        _gitCommitDialogState.update { it.copy(authorEmail = email) }
+    }
+
+    fun updateCommitStageUntracked(enabled: Boolean) {
+        _gitCommitDialogState.update { it.copy(stageUntracked = enabled) }
+    }
+
+    fun generateCommitMessage() {
+        if (_gitCommitDialogState.value.generatingMessage || _gitCommitDialogState.value.busy) return
+        viewModelScope.launch {
+            val currentDialog = _gitCommitDialogState.value
+            val state = resolveGitSnapshot(refreshUi = true) ?: run {
+                _gitCommitDialogState.update {
+                    it.copy(errorMessage = _gitRepoState.value.message)
+                }
+                return@launch
+            }
+            val (repository, snapshot) = state
+            if (snapshot.clean) {
+                _gitCommitDialogState.update {
+                    it.copy(errorMessage = "No repo changes available for a commit message.")
+                }
+                return@launch
+            }
+            _gitCommitDialogState.update {
+                it.copy(
+                    visible = true,
+                    draftMessage = currentDialog.draftMessage,
+                    generatingMessage = true,
+                    busy = false,
+                    errorMessage = null,
+                    progressMessage = "Generating commit message…",
+                )
+            }
+            val gitContext = gitStatusService.buildAiContext(repository, snapshot)
+            val prompt = gitContext.getOrElse {
+                _gitCommitDialogState.update { state ->
+                    state.copy(
+                        generatingMessage = false,
+                        progressMessage = null,
+                        errorMessage = it.message ?: "Could not build git context for AI message generation.",
+                    )
+                }
+                return@launch
+            }
+            val generated = gitCommitMessageService.generateCommitMessage(prompt)
+            generated.fold(
+                onSuccess = { message ->
+                    _gitCommitDialogState.update { state ->
+                        state.copy(
+                            draftMessage = message,
+                            generatingMessage = false,
+                            progressMessage = null,
+                            errorMessage = null,
+                        )
+                    }
+                },
+                onFailure = {
+                    _gitCommitDialogState.update { state ->
+                        state.copy(
+                            generatingMessage = false,
+                            progressMessage = null,
+                            errorMessage = it.message ?: "Commit message generation failed.",
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun commitChanges(pushAfterCommit: Boolean) {
+        if (_gitCommitDialogState.value.busy || _gitCommitDialogState.value.generatingMessage) return
+        viewModelScope.launch {
+            val currentDialog = _gitCommitDialogState.value
+            val state = resolveGitSnapshot(refreshUi = true) ?: run {
+                _gitCommitDialogState.update {
+                    it.copy(errorMessage = _gitRepoState.value.message)
+                }
+                return@launch
+            }
+            val (repository, snapshot) = state
+            if (snapshot.clean) {
+                if (pushAfterCommit && snapshot.aheadCount > 0) {
+                    _gitCommitDialogState.update {
+                        it.copy(
+                            busy = true,
+                            progressMessage = "Pushing tracked branch…",
+                            errorMessage = null,
+                        )
+                    }
+                    pushTrackedBranch(repository, snapshot).fold(
+                        onSuccess = {
+                            resolveGitSnapshot(refreshUi = true)
+                            _gitCommitDialogState.value = GitCommitDialogState()
+                            _status.value = it.message
+                        },
+                        onFailure = {
+                            resolveGitSnapshot(refreshUi = true)
+                            _gitCommitDialogState.update { dialog ->
+                                dialog.copy(
+                                    busy = false,
+                                    progressMessage = null,
+                                    errorMessage = it.message ?: "Push failed.",
+                                )
+                            }
+                        },
+                    )
+                    return@launch
+                }
+                _gitCommitDialogState.update {
+                    it.copy(errorMessage = "No changes available to commit.")
+                }
+                return@launch
+            }
+            if (pushAfterCommit && !snapshot.hasTrackedUpstream) {
+                _gitCommitDialogState.update {
+                    it.copy(errorMessage = "Current branch has no tracked upstream yet.")
+                }
+                return@launch
+            }
+            val author = GitIdentity(
+                name = currentDialog.authorName,
+                email = currentDialog.authorEmail,
+            )
+            _gitCommitDialogState.update {
+                it.copy(
+                    busy = true,
+                    progressMessage = if (pushAfterCommit) {
+                        "Committing and pushing…"
+                    } else {
+                        "Committing…"
+                    },
+                    errorMessage = null,
+                )
+            }
+            val commitResult = gitCommitService.commit(
+                request = GitCommitRequest(
+                    repository = repository,
+                    message = currentDialog.draftMessage,
+                    author = author,
+                    stageUntracked = currentDialog.stageUntracked,
+                ),
+                onProgress = { progress ->
+                    _gitCommitDialogState.update { dialog ->
+                        dialog.copy(
+                            busy = true,
+                            progressMessage = progress,
+                            errorMessage = null,
+                        )
+                    }
+                },
+            )
+            val commit = commitResult.getOrElse {
+                _gitCommitDialogState.update { dialog ->
+                    dialog.copy(
+                        busy = false,
+                        progressMessage = null,
+                        errorMessage = it.message ?: "Commit failed.",
+                    )
+                }
+                return@launch
+            }
+            if (!pushAfterCommit) {
+                gitIdentityStore.save(author)
+                resolveGitSnapshot(refreshUi = true)
+                _gitCommitDialogState.value = GitCommitDialogState()
+                _status.value = "Committed ${commit.shortCommitId} on ${commit.branchName}"
+                return@launch
+            }
+            val upstreamBranch = snapshot.upstreamBranch
+            val remoteName = snapshot.upstreamRemoteName
+            val remoteUrl = snapshot.upstreamRemoteUrl
+            if (upstreamBranch.isNullOrBlank() || remoteName.isNullOrBlank() || remoteUrl.isNullOrBlank()) {
+                resolveGitSnapshot(refreshUi = true)
+                _gitCommitDialogState.update { dialog ->
+                    dialog.copy(
+                        busy = false,
+                        progressMessage = null,
+                        errorMessage = "Commit succeeded, but the current branch has no tracked upstream.",
+                    )
+                }
+                _status.value = "Committed ${commit.shortCommitId} locally. Push was skipped."
+                return@launch
+            }
+            pushTrackedBranch(repository, snapshot).fold(
+                onSuccess = {
+                    gitIdentityStore.save(author)
+                    resolveGitSnapshot(refreshUi = true)
+                    _gitCommitDialogState.value = GitCommitDialogState()
+                    _status.value = "Committed ${commit.shortCommitId} and pushed ${snapshot.branchName}"
+                },
+                onFailure = {
+                    resolveGitSnapshot(refreshUi = true)
+                    _gitCommitDialogState.update { dialog ->
+                        dialog.copy(
+                            busy = false,
+                            progressMessage = null,
+                            errorMessage = (it.message ?: "Push failed.") +
+                                " Commit ${commit.shortCommitId} was created locally.",
+                        )
+                    }
+                    _status.value = "Commit ${commit.shortCommitId} created locally, but push failed."
+                },
+            )
+        }
+    }
+
+    fun clearSavedGitAuth(repoUrl: String) {
+        val remote = GitRemoteSpec.parseHttps(repoUrl) ?: return
+        gitAuthStore.clear(remote.host)
+        _cloneUiState.value = GitCloneUiState()
+    }
+
+    fun cloneRepository(
+        parentTreeUri: Uri,
+        repoUrl: String,
+        usernameInput: String,
+        tokenInput: String,
+        useSavedToken: Boolean,
+        saveToken: Boolean,
+    ) {
+        viewModelScope.launch {
+            val remote = GitRemoteSpec.parseHttps(repoUrl)
+            if (remote == null) {
+                _cloneUiState.value = GitCloneUiState(
+                    errorMessage = "Enter a valid HTTPS repository URL.",
+                )
+                return@launch
+            }
+            val savedAuth = gitAuthStore.load(remote.host)
+            val username = usernameInput.trim().ifEmpty {
+                savedAuth?.username ?: com.tabletaide.ide.data.defaultGitUsernameForHost(remote.host)
+            }
+            val token = when {
+                useSavedToken -> savedAuth?.token.orEmpty()
+                else -> tokenInput.trim()
+            }
+            if (token.isBlank()) {
+                _cloneUiState.value = GitCloneUiState(
+                    errorMessage = "A personal access token is required for HTTPS clone.",
+                )
+                return@launch
+            }
+            when (val target = cloneTargetResolver.resolve(parentTreeUri, remote)) {
+                is SupportedCloneTarget -> {
+                    _cloneUiState.value = GitCloneUiState(
+                        busy = true,
+                        progressMessage = "Preparing clone…",
+                    )
+                    when (
+                        val result = gitCloneService.clone(
+                            request = GitCloneRequest(
+                                remote = remote,
+                                target = target,
+                                username = username,
+                                token = token,
+                                saveAuth = saveToken || useSavedToken,
+                            ),
+                            onProgress = { message ->
+                                _cloneUiState.value = GitCloneUiState(
+                                    busy = true,
+                                    progressMessage = message,
+                                )
+                            },
+                        )
+                    ) {
+                        is GitCloneSuccess -> {
+                            val repoTreeUri =
+                                workspace.childTreeUri(parentTreeUri, result.remote.repoName)
+                            if (repoTreeUri == null) {
+                                _cloneUiState.value = GitCloneUiState(
+                                    errorMessage = "Clone finished but Kinetic could not reopen the cloned repo. Open it manually from the chosen folder.",
+                                )
+                                return@launch
+                            }
+                            openWorkspaceRoot(repoTreeUri)
+                            _status.value = "Cloned ${result.remote.repoName}"
+                        }
+                        is GitCloneFailure -> {
+                            _cloneUiState.value = GitCloneUiState(
+                                errorMessage = result.error.userMessage,
+                            )
+                        }
+                    }
+                }
+                else -> {
+                    val message = (target as? com.tabletaide.ide.data.UnsupportedCloneTarget)
+                        ?.userMessage
+                        ?: "Clone target is not supported."
+                    _cloneUiState.value = GitCloneUiState(errorMessage = message)
+                }
+            }
+        }
+    }
+
     fun persistDraftIfPossible() {
         val uri = workspace.rootTreeUriOrNull()?.toString() ?: return
         sessionStore.saveSnapshot(
@@ -363,7 +751,81 @@ class IdeViewModel @Inject constructor(
     fun refreshTree() {
         _tree.value = workspace.listTreeRows()
         recomputeFilteredExplorerRows()
+        refreshGitState()
     }
+
+    private fun refreshGitState() {
+        gitRefreshJob?.cancel()
+        gitRefreshJob = viewModelScope.launch {
+            resolveGitSnapshot(refreshUi = true)
+        }
+    }
+
+    private suspend fun resolveGitSnapshot(
+        refreshUi: Boolean,
+    ): Pair<GitRepositoryReady, GitStatusSnapshot>? {
+        return when (val resolution = gitRepositoryResolver.resolveWorkspace(workspace.rootTreeUriOrNull())) {
+            is GitRepositoryReady -> {
+                val snapshot = gitStatusService.loadStatus(resolution).getOrElse {
+                    gitRepository = null
+                    gitSnapshot = null
+                    if (refreshUi) {
+                        _gitRepoState.value = GitRepoUiState(
+                            message = it.message ?: "Git status is unavailable for this workspace.",
+                        )
+                    }
+                    return null
+                }
+                gitRepository = resolution
+                gitSnapshot = snapshot
+                if (refreshUi) {
+                    _gitRepoState.value = GitRepoUiState.fromSnapshot(snapshot)
+                }
+                resolution to snapshot
+            }
+            else -> {
+                gitRepository = null
+                gitSnapshot = null
+                if (refreshUi) {
+                    val message = (resolution as? com.tabletaide.ide.data.GitRepositoryUnavailable)
+                        ?.userMessage
+                        ?: "Open a git repository root to use commit and push."
+                    _gitRepoState.value = GitRepoUiState(message = message)
+                }
+                null
+            }
+        }
+    }
+
+    private fun preferredIdentity(snapshot: GitStatusSnapshot): GitIdentity {
+        val stored = gitIdentityStore.load()
+        return GitIdentity(
+            name = snapshot.identity.name.ifBlank { stored.name },
+            email = snapshot.identity.email.ifBlank { stored.email },
+        )
+    }
+
+    private suspend fun pushTrackedBranch(
+        repository: GitRepositoryReady,
+        snapshot: GitStatusSnapshot,
+    ) = gitPushService.push(
+        request = GitPushRequest(
+            repository = repository,
+            branchName = snapshot.branchName,
+            upstreamBranch = snapshot.upstreamBranch.orEmpty(),
+            remoteName = snapshot.upstreamRemoteName.orEmpty(),
+            remoteUrl = snapshot.upstreamRemoteUrl.orEmpty(),
+        ),
+        onProgress = { progress ->
+            _gitCommitDialogState.update { dialog ->
+                dialog.copy(
+                    busy = true,
+                    progressMessage = progress,
+                    errorMessage = null,
+                )
+            }
+        },
+    )
 
     private suspend fun openOrSelectRelativePath(path: String, displayNameFallback: String) {
         val existing = _tabs.value.indexOfFirst { it.path == path }

@@ -6,6 +6,7 @@ import com.tabletaide.ide.IdeConstants
 import com.tabletaide.ide.agent.AnthropicClientImpl
 import com.tabletaide.ide.agent.GeminiClientImpl
 import com.tabletaide.ide.agent.LlmClient
+import com.tabletaide.ide.agent.PromptEnhancementService
 import com.tabletaide.ide.agent.StreamEvent
 import com.tabletaide.ide.agent.ToolRouter
 import com.tabletaide.ide.data.LlmCredentialState
@@ -30,6 +31,7 @@ import javax.inject.Inject
 class AgentViewModel @Inject constructor(
     private val anthropicClient: AnthropicClientImpl,
     private val geminiClient: GeminiClientImpl,
+    private val promptEnhancementService: PromptEnhancementService,
     private val toolRouter: ToolRouter,
     private val providerStore: LlmProviderStore,
     private val workspace: WorkspaceRepository,
@@ -55,6 +57,12 @@ class AgentViewModel @Inject constructor(
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
+    private val _composerDraft = MutableStateFlow("")
+    val composerDraft: StateFlow<String> = _composerDraft.asStateFlow()
+
+    private val _enhancingPrompt = MutableStateFlow(false)
+    val enhancingPrompt: StateFlow<Boolean> = _enhancingPrompt.asStateFlow()
+
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
@@ -70,9 +78,55 @@ class AgentViewModel @Inject constructor(
         _error.value = null
     }
 
+    fun updateComposerDraft(text: String) {
+        _composerDraft.value = text
+    }
+
+    fun sendComposerDraft(systemPromptAppendix: String = "") {
+        val trimmed = _composerDraft.value.trim()
+        if (trimmed.isEmpty()) return
+        if (_busy.value || _enhancingPrompt.value) return
+        if (!_credentials.value.hasKey(_provider.value)) {
+            _error.value = "API key required. Tap the key icon in AI Architect to add one."
+            return
+        }
+        _composerDraft.value = ""
+        sendUserMessage(trimmed, systemPromptAppendix)
+    }
+
+    fun enhanceComposerDraft(workspaceContext: String = "") {
+        val draft = _composerDraft.value.trim()
+        if (draft.isEmpty()) return
+        if (_busy.value || _enhancingPrompt.value) return
+        if (!_credentials.value.hasKey(_provider.value)) {
+            _error.value = "API key required. Tap the key icon in AI Architect to add one."
+            return
+        }
+        viewModelScope.launch {
+            try {
+                _enhancingPrompt.value = true
+                _error.value = null
+                val enhanced = promptEnhancementService.enhancePrompt(
+                    draft = draft,
+                    workspaceContext = workspaceContext.trim(),
+                )
+                enhanced.fold(
+                    onSuccess = { _composerDraft.value = it },
+                    onFailure = {
+                        _error.value = it.message ?: "Prompt enhancement failed."
+                    },
+                )
+            } catch (e: Exception) {
+                _error.value = e.message ?: "Prompt enhancement failed."
+            } finally {
+                _enhancingPrompt.value = false
+            }
+        }
+    }
+
     fun sendUserMessage(text: String, systemPromptAppendix: String = "") {
         val trimmed = text.trim()
-        if (trimmed.isEmpty() || _busy.value) return
+        if (trimmed.isEmpty() || _busy.value || _enhancingPrompt.value) return
         if (!_credentials.value.hasKey(_provider.value)) {
             _error.value = "API key required. Tap the key icon in AI Architect to add one."
             return
@@ -98,7 +152,7 @@ class AgentViewModel @Inject constructor(
     }
 
     fun clearConversation() {
-        if (_busy.value) return
+        if (_busy.value || _enhancingPrompt.value) return
         apiHistory.length().let { len ->
             for (i in len - 1 downTo 0) apiHistory.remove(i)
         }

@@ -10,6 +10,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **[ROADMAP Agent UX]** Added a one-shot `PromptEnhancementService` so the AI panel can rewrite the
+  current composer draft into a clearer prompt without using the full chat/tool loop or sending the
+  message immediately.
+
+- **[ROADMAP Git commit/push MVP]** Added real local-repo workflow services:
+  `GitRepositoryResolver`, `GitStatusService`, `GitCommitService`, `GitPushService`,
+  `GitRepoModels`, and `GitIdentityStore` so Kinetic can resolve repo roots, inspect status,
+  commit on-device, and push the current tracked HTTPS branch with saved auth.
+
+- **[ROADMAP Git commit/push MVP]** Added one-shot AI commit-message generation via
+  `GitCommitMessageService`, using the currently selected provider plus bounded real git
+  status/diff context instead of the full agent chat/tool loop.
+
+- **[ROADMAP Git clone auth MVP]** Added real startup **HTTPS token** clone support with **JGit**,
+  typed clone runtime models, clone target resolution for supported shared-storage folders, and
+  startup-gateway wiring that opens a cloned repo directly into the IDE shell.
+
+- **[ROADMAP Git clone auth MVP]** Added `GitAuthStore` with Android Keystore-backed encryption for
+  saved host-scoped git tokens and backup exclusions via `res/xml/backup_rules.xml` and
+  `res/xml/data_extraction_rules.xml`.
+
 - **[ROADMAP Startup Gateway MVP]** Added a conditional launch route: `MainActivity` now shows a
   dedicated startup dashboard only when no restorable session/workspace exists, while returning users
   still resume directly into the IDE shell. `StartupGatewayScreen` ships `New Project`, `Open Folder`,
@@ -121,6 +142,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `ToolRouter` `search_files` match cap loop: `break@outer` replaces invalid `return@outer` (compile error).
 
 ### Changed
+
+- `AgentChatPanel` now supports an `Enhance prompt` composer action that rewrites the typed draft
+  in place for review before send, using the selected provider and current workspace context.
+
+- Kinetic shell git surfaces are now real: `KineticTopBar`, `KineticStatusBar`,
+  `IdeCommandPalette`, and new `GitCommitDialog` now reflect actual repo branch/change state and
+  expose `Generate message`, `Commit`, and `Commit & push` flows against the current tracked branch.
+
+- Startup clone UI is no longer a placeholder: `CloneRepositoryDialog` now validates HTTPS URLs,
+  retains the picked destination `Uri`, supports saved-token reuse/clear, masks PAT entry, shows
+  progress/errors, and requests shared-storage access when needed for real clone writes.
+
+- Explorer and agent file tooling now hide or reject `.git` paths by default once repos are cloned
+  locally (`WorkspaceRepository.listTreeRows()`, `ToolRouter`).
+
+- Android manifest now declares `MANAGE_EXTERNAL_STORAGE` for first-version shared-folder git clone
+  support and references backup/data-extraction rules to exclude saved git auth from backup flows.
 
 - Updated machine-local Gradle / Java IDE config to use `C:/Program Files/Java/jdk-25.0.2`
   in `gradle.properties` and `.vscode/settings.json`, fixing invalid `org.gradle.java.home`

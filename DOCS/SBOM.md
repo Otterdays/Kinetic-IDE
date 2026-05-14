@@ -2,7 +2,7 @@
 
 # SBOM — Kinetic
 
-**Last updated:** 2026-04-30
+**Last updated:** 2026-05-13
 
 ## Build toolchain
 
@@ -33,6 +33,7 @@
 | com.google.dagger:hilt-android | 2.59.2 |
 | androidx.hilt:hilt-navigation-compose | 1.2.0 |
 | com.squareup.okhttp3:okhttp | 4.12.0 |
+| org.eclipse.jgit:org.eclipse.jgit | 7.6.0.202603022253-r |
 | org.jetbrains.kotlinx:kotlinx-coroutines-android | 1.9.0 |
 
 ## Build-time / debug / test dependencies
@@ -50,3 +51,7 @@
 - Root repo policy: `FAIL_ON_PROJECT_REPOS` with `google()` and `mavenCentral()`.
 - 2026-04-30 theme-mode UI pass: no dependency or plugin version changes.
 - 2026-05-13 startup gateway MVP: no dependency or plugin version changes.
+- 2026-05-13 git clone auth MVP: added `org.eclipse.jgit:org.eclipse.jgit` for on-device clone support.
+- 2026-05-13 git clone auth MVP: shared-folder clone path currently depends on Android `MANAGE_EXTERNAL_STORAGE`; saved git auth is excluded from backup/data-transfer via XML rules.
+- 2026-05-13 git commit / push MVP: no dependency or plugin version changes. Reuses existing JGit runtime plus saved host-scoped HTTPS auth and adds local git author-name/email persistence in app prefs.
+- 2026-05-13 prompt enhancer UX: no dependency or plugin version changes. Reuses the existing Anthropic/Gemini provider stack for one-shot draft rewriting in the AI composer.

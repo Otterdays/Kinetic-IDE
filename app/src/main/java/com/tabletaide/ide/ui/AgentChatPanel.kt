@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material3.DropdownMenu
@@ -52,10 +53,14 @@ import com.tabletaide.ide.ui.theme.KineticColors
 fun AgentChatPanel(
     lines: List<AgentViewModel.ChatLine>,
     busy: Boolean,
+    enhancingPrompt: Boolean,
     error: String?,
     currentProvider: LlmProvider,
     credentials: LlmCredentialState,
-    onSend: (String) -> Unit,
+    composerDraft: String,
+    onDraftChange: (String) -> Unit,
+    onSend: () -> Unit,
+    onEnhancePrompt: () -> Unit,
     onClear: () -> Unit,
     onProviderChange: (LlmProvider) -> Unit,
     onOpenApiKeys: () -> Unit,
@@ -64,11 +69,12 @@ fun AgentChatPanel(
     onApplyToolMutation: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var draft by remember { mutableStateOf("") }
     var providerMenuOpen by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
     val hasSelectedProviderKey = credentials.hasKey(currentProvider)
-    val sendEnabled = !busy && draft.isNotBlank() && hasSelectedProviderKey
+    val sendEnabled = !busy && !enhancingPrompt && composerDraft.isNotBlank() && hasSelectedProviderKey
+    val enhanceEnabled =
+        !busy && !enhancingPrompt && composerDraft.isNotBlank() && hasSelectedProviderKey
     val providerLabel = if (hasSelectedProviderKey) {
         currentProvider.displayName
     } else {
@@ -161,6 +167,7 @@ fun AgentChatPanel(
                 )
                 Text(
                     when {
+                        enhancingPrompt -> "ENHANCING"
                         busy -> "WORKING"
                         hasSelectedProviderKey -> "READY"
                         else -> "NEEDS KEY"
@@ -366,49 +373,83 @@ fun AgentChatPanel(
                 .padding(16.dp),
         ) {
             Box(modifier = Modifier.weight(1f)) {
-                TextField(
-                    value = draft,
-                    onValueChange = { draft = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !busy,
-                    minLines = 3,
-                    maxLines = 5,
-                    placeholder = {
-                        Text("Ask the Architect…", color = KineticColors.outline, fontSize = 12.sp)
-                    },
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = KineticColors.surfaceBright,
-                        unfocusedContainerColor = KineticColors.surfaceBright,
-                        disabledContainerColor = KineticColors.surfaceBright.copy(alpha = 0.5f),
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        cursorColor = KineticColors.primary,
-                        focusedTextColor = KineticColors.onSurface,
-                        unfocusedTextColor = KineticColors.onSurface,
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                )
-                IconButton(
-                    onClick = {
-                        if (!hasSelectedProviderKey) {
-                            onOpenApiKeys()
-                            return@IconButton
-                        }
-                        onSend(draft)
-                        draft = ""
-                    },
-                    enabled = sendEnabled,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(8.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(
-                            Brush.linearGradient(
-                                listOf(KineticColors.primary, KineticColors.primaryDim),
-                            ),
+                Column {
+                    TextField(
+                        value = composerDraft,
+                        onValueChange = onDraftChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !busy && !enhancingPrompt,
+                        minLines = 3,
+                        maxLines = 5,
+                        placeholder = {
+                            Text("Ask the Architect…", color = KineticColors.outline, fontSize = 12.sp)
+                        },
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = KineticColors.surfaceBright,
+                            unfocusedContainerColor = KineticColors.surfaceBright,
+                            disabledContainerColor = KineticColors.surfaceBright.copy(alpha = 0.5f),
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            cursorColor = KineticColors.primary,
+                            focusedTextColor = KineticColors.onSurface,
+                            unfocusedTextColor = KineticColors.onSurface,
                         ),
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.Send, null, tint = KineticColors.onPrimaryFixed)
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TextButton(
+                            onClick = {
+                                if (!hasSelectedProviderKey) {
+                                    onOpenApiKeys()
+                                } else {
+                                    onEnhancePrompt()
+                                }
+                            },
+                            enabled = composerDraft.isNotBlank() && !busy && !enhancingPrompt,
+                        ) {
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = KineticColors.primary,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Text(
+                                text = if (enhancingPrompt) "Enhancing…" else "Enhance prompt",
+                                color = KineticColors.primary,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(start = 6.dp),
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                if (!hasSelectedProviderKey) {
+                                    onOpenApiKeys()
+                                    return@IconButton
+                                }
+                                onSend()
+                            },
+                            enabled = sendEnabled,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(KineticColors.primary, KineticColors.primaryDim),
+                                    ),
+                                ),
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Send,
+                                null,
+                                tint = KineticColors.onPrimaryFixed,
+                            )
+                        }
+                    }
                 }
             }
         }

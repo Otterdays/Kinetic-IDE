@@ -10,6 +10,14 @@ object IdeConstants {
     const val GEMINI_MODEL = "gemini-2.0-flash"
     const val MAX_OUTPUT_TOKENS = 4096
     const val MAX_TOOL_ROUNDS = 8
+    const val GIT_COMMIT_PATH_LIMIT = 24
+    const val GIT_COMMIT_DIFF_FILE_LIMIT = 12
+    const val GIT_COMMIT_DIFF_CHAR_LIMIT = 6_000
+    const val GIT_COMMIT_PROMPT_MAX_CHARS = 10_000
+    const val GIT_COMMIT_MESSAGE_MAX_TOKENS = 120
+    const val PROMPT_ENHANCEMENT_INPUT_MAX_CHARS = 6_000
+    const val PROMPT_ENHANCEMENT_CONTEXT_MAX_CHARS = 2_000
+    const val PROMPT_ENHANCEMENT_MAX_TOKENS = 320
 
     val SYSTEM_PROMPT: String = """
         You are an AI coding assistant inside a tablet IDE. The user has opened a workspace folder via Android storage (SAF).

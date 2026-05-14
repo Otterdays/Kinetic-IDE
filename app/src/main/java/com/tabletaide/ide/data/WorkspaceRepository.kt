@@ -40,6 +40,12 @@ class WorkspaceRepository @Inject constructor(
         DocumentFile.fromTreeUri(appContext, treeUri)?.name?.trim().orEmpty()
             .ifEmpty { "Workspace" }
 
+    fun childTreeUri(parentTreeUri: Uri, childName: String): Uri? {
+        val parent = DocumentFile.fromTreeUri(appContext, parentTreeUri) ?: return null
+        val child = parent.findFile(childName)?.takeIf { it.isDirectory } ?: return null
+        return buildTreeUri(child)
+    }
+
     suspend fun createStarterProject(
         parentTreeUri: Uri,
         projectName: String,
@@ -257,20 +263,21 @@ class WorkspaceRepository @Inject constructor(
             }
         }
 
-    fun listTreeRows(): List<TreeRow> {
+    fun listTreeRows(includeGitMetadata: Boolean = false): List<TreeRow> {
         val r = root ?: return emptyList()
         val out = mutableListOf<TreeRow>()
         fun walk(doc: DocumentFile, prefix: String, depth: Int) {
             val name = doc.name ?: return
+            if (!includeGitMetadata && name == ".git") return
             val path = if (prefix.isEmpty()) name else "$prefix/$name"
             val isDir = doc.isDirectory
             out.add(TreeRow(path = path, uri = doc.uri, displayName = name, isDirectory = isDir, depth = depth))
             if (isDir) {
-                val kids = doc.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name })) ?: emptyList()
+                val kids = doc.listFiles().sortedWith(compareBy({ !it.isDirectory }, { it.name }))
                 kids.forEach { child -> walk(child, path, depth + 1) }
             }
         }
-        val roots = r.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name })) ?: emptyList()
+        val roots = r.listFiles().sortedWith(compareBy({ !it.isDirectory }, { it.name }))
         roots.forEach { walk(it, "", 0) }
         return out
     }
@@ -356,7 +363,7 @@ class WorkspaceRepository @Inject constructor(
     private fun deleteTree(doc: DocumentFile): Boolean {
         if (doc.isDirectory) {
             val kids = doc.listFiles()
-            kids?.forEach { child ->
+            kids.forEach { child ->
                 if (!deleteTree(child)) return false
             }
         }

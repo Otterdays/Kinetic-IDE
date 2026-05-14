@@ -88,3 +88,7 @@
 *[2026-05-13]: [AMENDED] Startup Gateway MVP shipped: launch now routes to a dedicated welcome dashboard only when no restorable session/workspace exists; returning sessions still resume directly into the IDE shell. Gateway adds `New Project`, `Open Folder`, `Clone Repository` placeholder flow, and recent workspaces via `RecentWorkspacesStore`.*
 
 *[2026-05-13]: [AMENDED] New starter project setup flow added in `WorkspaceRepository.createStarterProject` with three minimal templates (`Blank workspace`, `Kotlin console`, `Web starter`) opened immediately after creation.*
+
+*[2026-05-13]: [AMENDED] Git Clone Auth MVP shipped: startup clone flow now performs real **HTTPS token** clones via **JGit**, stores saved tokens with Android Keystore-backed encryption, opens cloned repos directly into the IDE, and hides `.git` from explorer/agent traversal by default. First version is intentionally constrained to primary shared-storage folders that can be resolved to filesystem paths and requires Android **All files access** for shared-folder clone writes.*
+
+*[2026-05-13]: [AMENDED] Git Commit / Push MVP shipped: the IDE now detects opened repo roots, shows real branch/change state in the shell, generates AI commit messages from bounded real git status + diff context, and supports commit plus tracked-branch push using the saved HTTPS auth flow. The commit dialog also stores author name/email locally for repeat commits on device.*

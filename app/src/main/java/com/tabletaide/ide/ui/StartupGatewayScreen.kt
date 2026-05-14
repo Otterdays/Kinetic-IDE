@@ -1,6 +1,9 @@
 package com.tabletaide.ide.ui
 
+import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.text.format.DateUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -33,11 +36,11 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,24 +50,34 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.tabletaide.ide.data.GitSavedAuthState
 import com.tabletaide.ide.data.RecentWorkspaceEntry
 import com.tabletaide.ide.data.StarterProjectTemplate
 import com.tabletaide.ide.ui.theme.KineticColors
-import kotlinx.coroutines.launch
 
 @Composable
 fun StartupGatewayScreen(
     recentWorkspaces: List<RecentWorkspaceEntry>,
     statusMessage: String?,
+    cloneUiState: GitCloneUiState,
+    checkAllFilesAccess: () -> Boolean,
+    onPeekSavedGitAuth: (String) -> GitSavedAuthState?,
+    onClearSavedGitAuth: (String) -> Unit,
+    onClearCloneFeedback: () -> Unit,
     onOpenWorkspace: (Uri) -> Unit,
     onOpenRecentWorkspace: (String) -> Unit,
     onCreateStarterProject: (Uri, String, StarterProjectTemplate) -> Unit,
+    onCloneRepository: (Uri, String, String, String, Boolean, Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
     val openWorkspacePicker = rememberWorkspaceTreePicker(onTreePicked = onOpenWorkspace)
+    var hasAllFilesAccess by remember { mutableStateOf(checkAllFilesAccess()) }
 
     var showNewProjectDialog by remember { mutableStateOf(false) }
     var showCloneDialog by remember { mutableStateOf(false) }
@@ -76,8 +89,10 @@ fun StartupGatewayScreen(
         newProjectParentLabel = DocumentFile.fromTreeUri(context, treeUri)?.name ?: "Selected folder"
     }
 
+    var cloneDestinationUri by remember { mutableStateOf<Uri?>(null) }
     var cloneDestinationLabel by remember { mutableStateOf<String?>(null) }
     val pickCloneDestination = rememberWorkspaceTreePicker { treeUri ->
+        cloneDestinationUri = treeUri
         cloneDestinationLabel = DocumentFile.fromTreeUri(context, treeUri)?.name ?: "Selected folder"
     }
 
@@ -86,6 +101,16 @@ fun StartupGatewayScreen(
         if (message.isNotEmpty()) {
             snackbarHostState.showSnackbar(message)
         }
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasAllFilesAccess = checkAllFilesAccess()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     if (showNewProjectDialog) {
@@ -110,20 +135,40 @@ fun StartupGatewayScreen(
     if (showCloneDialog) {
         CloneRepositoryDialog(
             selectedDestinationLabel = cloneDestinationLabel,
+            hasAllFilesAccess = hasAllFilesAccess,
+            cloneUiState = cloneUiState,
+            lookupSavedAuth = onPeekSavedGitAuth,
             onPickDestination = pickCloneDestination,
+            onOpenManageFilesAccess = {
+                val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    Intent(
+                        Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                        Uri.parse("package:${context.packageName}"),
+                    )
+                } else {
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.parse("package:${context.packageName}")
+                    }
+                }
+                context.startActivity(intent)
+            },
+            onClearSavedAuth = onClearSavedGitAuth,
             onDismiss = {
                 showCloneDialog = false
+                cloneDestinationUri = null
                 cloneDestinationLabel = null
+                onClearCloneFeedback()
             },
-            onStageDraft = { repoUrl ->
-                showCloneDialog = false
-                val destination = cloneDestinationLabel ?: "selected folder"
-                cloneDestinationLabel = null
-                val repoLabel = repoUrl.substringAfterLast('/').ifBlank { repoUrl }
-                val message = "$repoLabel staged for $destination. Real git clone lands in a later phase."
-                scope.launch {
-                    snackbarHostState.showSnackbar(message)
-                }
+            onClone = { repoUrl, username, token, useSavedToken, saveToken ->
+                val targetUri = cloneDestinationUri ?: return@CloneRepositoryDialog
+                onCloneRepository(
+                    targetUri,
+                    repoUrl,
+                    username,
+                    token,
+                    useSavedToken,
+                    saveToken,
+                )
             },
         )
     }

@@ -2,6 +2,83 @@
 
 # SCRATCHPAD — Kinetic
 
+## Session checkpoint — 2026-05-13 (prompt enhancer shipped)
+
+- **Done:** Added a Trae-style `Enhance prompt` flow to `AgentChatPanel` so the current draft can be
+  rewritten in-place for review before send.
+- **Done:** Added `PromptEnhancementService` as a one-shot provider-backed rewrite path that preserves
+  user intent, does not answer the prompt, and stays separate from the full chat/tool loop.
+- **Done:** Hoisted chat composer draft state into `AgentViewModel` with explicit `composerDraft` and
+  `enhancingPrompt` state, plus send/enhance actions so the input can be safely replaced after rewrite.
+- **Verify:** `.\gradlew.bat :app:compileDebugKotlin` from repo root **BUILD SUCCESSFUL**.
+
+## Session checkpoint — 2026-05-13 (prompt enhancer in progress)
+
+- **In progress:** Adding a Trae-style composer enhancement flow for `AgentChatPanel` so the user can
+  click an `Enhance prompt` action, let the provider rewrite the current draft, review the result,
+  and only then hit send.
+- **In progress:** Added `PromptEnhancementService` as a one-shot provider-backed rewrite path
+  separate from the main chat/tool loop, plus `AgentViewModel` composer draft + enhancing state so
+  enhanced text can replace the current input cleanly.
+- **Next:** Wire the compose UI button/states in the chat panel, then verify `:app:compileDebugKotlin`
+  and amend summary/changelog if the feature ships cleanly.
+
+## Session checkpoint — 2026-05-13 (git commit/push MVP shipped)
+
+- **Done:** Added real repo workflow services for opened local repos:
+  `GitRepositoryResolver`, `GitStatusService`, `GitCommitService`, `GitPushService`,
+  `GitRepoModels`, and `GitIdentityStore`.
+- **Done:** Added one-shot AI commit-message generation in
+  `app/src/main/java/com/tabletaide/ide/agent/GitCommitMessageService.kt`, using current provider
+  selection plus bounded real git status/diff input instead of the full agent chat/tool loop.
+- **Done:** Added repo state + commit dialog flow in `IdeViewModel` and UI wiring across
+  `TabletIdeScreen`, `KineticShell`, `IdeCommandPalette`, and new `GitCommitDialog`.
+  The shell now shows real branch/status counts, supports AI draft generation, commit, and
+  tracked-branch commit-and-push, with retryable push when the repo is already ahead.
+- **Verify:** `.\gradlew.bat :app:compileDebugKotlin` from repo root **BUILD SUCCESSFUL**.
+- **Known limitation:** Push remains HTTPS-only for MVP and depends on saved host-scoped auth from
+  the clone/auth flow; branch creation, remote picking, SSH, and force-push remain out of scope.
+
+## Session checkpoint — 2026-05-13 (git commit/push MVP in progress)
+
+- **In progress:** Added the first real commit/push runtime layer under `app/src/main/java/com/tabletaide/ide/data/`:
+  `GitRepoModels`, `GitRepositoryResolver`, `GitStatusService`, `GitCommitService`, `GitPushService`,
+  plus `GitIdentityStore` for author name/email persistence across commit attempts.
+- **In progress:** Added a one-shot provider-backed AI path in
+  `app/src/main/java/com/tabletaide/ide/agent/GitCommitMessageService.kt` so commit-message generation
+  can use real git status + bounded diff context without the full tool/chat loop.
+- **Constraint:** Git workflow is intentionally scoped to repo roots opened from resolvable shared-storage
+  paths, current checked-out branch, and tracked HTTPS upstreams with saved host-scoped auth.
+- **Next:** Wire repo state into `IdeViewModel`, add commit dialog + top-bar/status-bar/palette actions,
+  then verify compile/build and update summary/changelog/SBOM for the shipped git workflow.
+
+## Session checkpoint — 2026-05-13 (git clone auth MVP shipped)
+
+- **Done:** Real startup clone flow now exists for **HTTPS token auth** using **JGit**. Added:
+  `GitCloneModels`, `GitAuthStore` (Keystore-backed token encryption), `CloneTargetResolver`,
+  `GitCloneService`, `GitCloneUiState`, and `IdeViewModel.cloneRepository(...)`.
+- **Done:** Startup clone dialog upgraded from placeholder to real flow: retains destination `Uri`,
+  validates HTTPS repo URLs, supports saved-token reuse/clear, masks PAT entry, shows progress,
+  and opens the cloned repo into the IDE on success.
+- **Done:** Repo guardrails added: explorer hides `.git` by default via `WorkspaceRepository.listTreeRows()`,
+  and agent file tools now reject `.git` paths in `ToolRouter`.
+- **Done:** Backup hardening for stored git auth: `kinetic_git_auth.xml` excluded from Android
+  cloud backup/device transfer via `res/xml/backup_rules.xml` and `res/xml/data_extraction_rules.xml`.
+- **Verify:** `.\gradlew.bat :app:compileDebugKotlin` from repo root **BUILD SUCCESSFUL**.
+- **Known limitation:** Shared-folder clone currently requires **All files access** and only supports
+  resolvable primary shared-storage folders for the first real git slice.
+
+## Session checkpoint — 2026-05-13 (git clone auth MVP in progress)
+
+- **In progress:** Real git clone/auth slice started with new runtime files:
+  `GitCloneModels`, `GitAuthStore`, `CloneTargetResolver`, `GitCloneService`.
+- **Direction:** HTTPS token auth first, JGit runtime, shared-folder clone target restricted to
+  resolvable primary shared storage, with explicit rejection for unsupported destinations.
+- **Security:** Token storage is being implemented with Android Keystore-backed encryption rather
+  than embedding credentials in URLs or recent-workspace state.
+- **Next:** Wire the resolver + clone service into `IdeViewModel` and replace the startup clone
+  placeholder with a real auth/progress flow.
+
 ## Session checkpoint — 2026-05-13 (root JDK path corrected)
 
 - **Issue:** Root Gradle / Android Studio sync still pointed at stale JDK path

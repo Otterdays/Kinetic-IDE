@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tabletaide.ide.data.GitRepoUiState
 import com.tabletaide.ide.ui.theme.KineticColors
 
 @Composable
@@ -163,12 +164,14 @@ fun KineticTopBar(
     selectedIndex: Int,
     canUndoNow: Boolean,
     canRedoNow: Boolean,
+    gitState: GitRepoUiState,
     onSelectTab: (Int) -> Unit,
     onCloseTab: (Int) -> Unit,
     onSave: () -> Unit,
     onSaveAll: () -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
+    onOpenCommitDialog: () -> Unit,
     onExecute: () -> Unit,
     agentBusy: Boolean,
     modifier: Modifier = Modifier,
@@ -247,6 +250,33 @@ fun KineticTopBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            if (gitState.available) {
+                Text(
+                    text = buildString {
+                        append(gitState.branchName)
+                        if (gitState.aheadCount > 0 || gitState.behindCount > 0) {
+                            append(" +${gitState.aheadCount}/-${gitState.behindCount}")
+                        }
+                    },
+                    fontSize = 11.sp,
+                    color = KineticColors.railAccent,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                )
+                Text(
+                    text = "Commit",
+                    fontSize = 12.sp,
+                    color = KineticColors.onSurface,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                        .clickable(onClick = onOpenCommitDialog)
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                )
+            }
             Text(
                 text = if (agentBusy) "Agent…" else "Ready",
                 fontSize = 11.sp,
@@ -360,6 +390,7 @@ fun BreadcrumbBar(
 fun KineticStatusBar(
     activePath: String?,
     agentBusy: Boolean,
+    gitState: GitRepoUiState,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -377,12 +408,21 @@ fun KineticStatusBar(
             color = KineticColors.onSurfaceVariant.copy(alpha = 0.6f),
         )
         Text(
-            "main",
+            if (gitState.available) gitState.branchName else "NO GIT",
             fontSize = 10.sp,
-            color = KineticColors.railAccent,
+            color = if (gitState.available) KineticColors.railAccent else KineticColors.onSurfaceVariant,
             modifier = Modifier.padding(start = 16.dp),
             fontFamily = FontFamily.Monospace,
         )
+        if (gitState.available) {
+            Text(
+                "S:${gitState.stagedCount} U:${gitState.unstagedCount} N:${gitState.untrackedCount}",
+                fontSize = 10.sp,
+                color = KineticColors.onSurfaceVariant,
+                modifier = Modifier.padding(start = 12.dp),
+                fontFamily = FontFamily.Monospace,
+            )
+        }
         Text(
             activePath?.substringAfterLast('/') ?: "—",
             fontSize = 10.sp,

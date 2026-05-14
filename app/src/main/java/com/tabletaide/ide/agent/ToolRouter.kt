@@ -62,7 +62,7 @@ class ToolRouter @Inject constructor(
         val editFile = JSONObject().apply {
             put("name", "edit_file")
             put("description", "Replace a unique substring inside an existing file. Fails if old_string is missing or appears more than once. Prefer this over write_file when changing only part of a file.")
-            put("input_schema", JSONObject().apply {
+            put("input_sch4ema", JSONObject().apply {
                 put("type", "object")
                 put(
                     "properties",
@@ -163,6 +163,9 @@ class ToolRouter @Inject constructor(
             "read_file" -> {
                 val path = input.optString("path")
                 if (path.isBlank()) return@withContext "Error: missing path"
+                if (containsGitMetadataPath(path)) {
+                    return@withContext "Error: .git paths are hidden from agent file tools by default"
+                }
                 workspace.readText(path).fold(
                     onSuccess = { it },
                     onFailure = { "Error: ${it.message}" },
@@ -172,6 +175,9 @@ class ToolRouter @Inject constructor(
                 val path = input.optString("path")
                 val content = input.optString("content")
                 if (path.isBlank()) return@withContext "Error: missing path"
+                if (containsGitMetadataPath(path)) {
+                    return@withContext "Error: .git paths are hidden from agent file tools by default"
+                }
                 workspace.writeText(path, content).fold(
                     onSuccess = { "Wrote file successfully: $path" },
                     onFailure = { "Error: ${it.message}" },
@@ -183,6 +189,9 @@ class ToolRouter @Inject constructor(
                 val newStr = input.optString("new_string")
                 if (path.isBlank()) return@withContext "Error: missing path"
                 if (oldStr.isEmpty()) return@withContext "Error: old_string must be non-empty"
+                if (containsGitMetadataPath(path)) {
+                    return@withContext "Error: .git paths are hidden from agent file tools by default"
+                }
                 val readRes = workspace.readText(path)
                 val current = readRes.getOrElse {
                     return@withContext "Error: ${it.message}"
@@ -239,6 +248,9 @@ class ToolRouter @Inject constructor(
             "create_directory" -> {
                 val path = input.optString("path")
                 if (path.isBlank()) return@withContext "Error: missing path"
+                if (containsGitMetadataPath(path)) {
+                    return@withContext "Error: .git paths are hidden from agent file tools by default"
+                }
                 workspace.createDirectory(path).fold(
                     onSuccess = { "Created directory: $it" },
                     onFailure = { "Error: ${it.message}" },
@@ -247,6 +259,9 @@ class ToolRouter @Inject constructor(
             "delete_path" -> {
                 val path = input.optString("path")
                 if (path.isBlank()) return@withContext "Error: missing path"
+                if (containsGitMetadataPath(path)) {
+                    return@withContext "Error: .git paths are hidden from agent file tools by default"
+                }
                 workspace.deleteNode(path).fold(
                     onSuccess = { "Deleted: $path" },
                     onFailure = { "Error: ${it.message}" },
@@ -256,6 +271,9 @@ class ToolRouter @Inject constructor(
                 val path = input.optString("path")
                 val newName = input.optString("new_name")
                 if (path.isBlank() || newName.isBlank()) return@withContext "Error: missing path or new_name"
+                if (containsGitMetadataPath(path) || containsGitMetadataPath(newName)) {
+                    return@withContext "Error: .git paths are hidden from agent file tools by default"
+                }
                 workspace.renameLeaf(path, newName).fold(
                     onSuccess = { "Renamed to: $it" },
                     onFailure = { "Error: ${it.message}" },
@@ -278,6 +296,10 @@ class ToolRouter @Inject constructor(
         }
         sb.append('$')
         return Regex(sb.toString())
+    }
+
+    private fun containsGitMetadataPath(path: String): Boolean {
+        return path.split('/').any { it == ".git" }
     }
 
     private companion object {

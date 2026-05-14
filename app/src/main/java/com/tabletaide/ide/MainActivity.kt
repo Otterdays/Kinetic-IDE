@@ -30,6 +30,7 @@ class MainActivity : ComponentActivity() {
             val appLaunchSurface by ideVm.appLaunchSurface.collectAsState()
             val recentWorkspaces by ideVm.recentWorkspaces.collectAsState()
             val status by ideVm.status.collectAsState()
+            val cloneUiState by ideVm.cloneUiState.collectAsState()
             KineticTheme(mode = themeMode) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -40,9 +41,15 @@ class MainActivity : ComponentActivity() {
                         AppLaunchSurface.STARTUP_GATEWAY -> StartupGatewayScreen(
                             recentWorkspaces = recentWorkspaces,
                             statusMessage = status,
+                            cloneUiState = cloneUiState,
+                            checkAllFilesAccess = ideVm::hasAllFilesAccess,
+                            onPeekSavedGitAuth = ideVm::peekSavedGitAuth,
+                            onClearSavedGitAuth = ideVm::clearSavedGitAuth,
+                            onClearCloneFeedback = ideVm::clearCloneFeedback,
                             onOpenWorkspace = ideVm::openWorkspaceRoot,
                             onOpenRecentWorkspace = ideVm::openRecentWorkspace,
                             onCreateStarterProject = ideVm::createStarterProject,
+                            onCloneRepository = ideVm::cloneRepository,
                         )
                         AppLaunchSurface.IDE_SHELL -> TabletIdeScreen(ideVm = ideVm)
                     }

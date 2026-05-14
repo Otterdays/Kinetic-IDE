@@ -73,6 +73,8 @@ fun TabletIdeScreen(
     val railSection by ideVm.railSection.collectAsState()
     val status by ideVm.status.collectAsState()
     val undoRedoEpoch by ideVm.undoRedoEpoch.collectAsState()
+    val gitRepoState by ideVm.gitRepoState.collectAsState()
+    val gitCommitDialogState by ideVm.gitCommitDialogState.collectAsState()
 
     val canUndoNow = remember(undoRedoEpoch, tabs, selectedTabIndex) {
         ideVm.canUndo()
@@ -84,9 +86,11 @@ fun TabletIdeScreen(
 
     val chatLines by agentVm.lines.collectAsState()
     val busy by agentVm.busy.collectAsState()
+    val enhancingPrompt by agentVm.enhancingPrompt.collectAsState()
     val agentError by agentVm.error.collectAsState()
     val provider by agentVm.provider.collectAsState()
     val credentials by agentVm.credentials.collectAsState()
+    val composerDraft by agentVm.composerDraft.collectAsState()
 
     val explorerRecentsList by ideVm.explorerRecents.collectAsState()
     val explorerFavoritesList by ideVm.explorerFavorites.collectAsState()
@@ -133,6 +137,10 @@ fun TabletIdeScreen(
         selectedTabIndex,
         busy,
         activePath,
+        gitRepoState.available,
+        gitRepoState.clean,
+        gitRepoState.canPush,
+        gitRepoState.branchName,
     ) {
         listOf(
             PaletteCommand(
@@ -160,6 +168,39 @@ fun TabletIdeScreen(
                 keywords = listOf("save", "all"),
                 enabled = tabs.any { it.dirty },
                 onInvoke = { ideVm.saveAllDirtyTabs() },
+            ),
+            PaletteCommand(
+                title = "Generate commit message",
+                subtitle = if (gitRepoState.available) {
+                    "AI draft from real git status and diff"
+                } else {
+                    "Open a git repo root first"
+                },
+                keywords = listOf("git", "commit", "message", "ai", "generate"),
+                enabled = gitRepoState.available,
+                onInvoke = { ideVm.showCommitDialog(autoGenerateMessage = true) },
+            ),
+            PaletteCommand(
+                title = "Commit",
+                subtitle = if (gitRepoState.available) {
+                    "Review message and commit current repo changes"
+                } else {
+                    "Open a git repo root first"
+                },
+                keywords = listOf("git", "commit", "changes"),
+                enabled = gitRepoState.available,
+                onInvoke = { ideVm.showCommitDialog() },
+            ),
+            PaletteCommand(
+                title = "Commit and push",
+                subtitle = if (gitRepoState.canPush) {
+                    "Commit current changes and push tracked branch"
+                } else {
+                    "Current branch needs a tracked upstream"
+                },
+                keywords = listOf("git", "commit", "push", "publish", "remote"),
+                enabled = gitRepoState.available,
+                onInvoke = { ideVm.showCommitDialog() },
             ),
             PaletteCommand(
                 title = "Next tab",
@@ -338,6 +379,18 @@ fun TabletIdeScreen(
             },
         )
     }
+    GitCommitDialog(
+        gitState = gitRepoState,
+        dialogState = gitCommitDialogState,
+        onDismiss = ideVm::hideCommitDialog,
+        onDraftChange = ideVm::updateCommitDraftMessage,
+        onAuthorNameChange = ideVm::updateCommitAuthorName,
+        onAuthorEmailChange = ideVm::updateCommitAuthorEmail,
+        onStageUntrackedChange = ideVm::updateCommitStageUntracked,
+        onGenerateMessage = ideVm::generateCommitMessage,
+        onCommit = { ideVm.commitChanges(pushAfterCommit = false) },
+        onCommitAndPush = { ideVm.commitChanges(pushAfterCommit = true) },
+    )
 
     Box(
         modifier = Modifier
@@ -345,7 +398,12 @@ fun TabletIdeScreen(
             .background(MaterialTheme.colorScheme.background)
             .onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                if (commandPaletteVisible || apiKeysDialogVisible || themeDialogVisible) {
+                if (
+                    commandPaletteVisible ||
+                    apiKeysDialogVisible ||
+                    themeDialogVisible ||
+                    gitCommitDialogState.visible
+                ) {
                     return@onPreviewKeyEvent false
                 }
                 when {
@@ -419,12 +477,14 @@ fun TabletIdeScreen(
                     selectedIndex = selectedTabIndex,
                     canUndoNow = canUndoNow,
                     canRedoNow = canRedoNow,
+                    gitState = gitRepoState,
                     onSelectTab = ideVm::selectTab,
                     onCloseTab = ::requestCloseTab,
                     onSave = ideVm::saveCurrentFile,
                     onSaveAll = ideVm::saveAllDirtyTabs,
                     onUndo = ideVm::undo,
                     onRedo = ideVm::redo,
+                    onOpenCommitDialog = ideVm::showCommitDialog,
                     onExecute = {
                         scope.launch {
                             snackbar.showSnackbar("Execute — connect Termux or a runner in a later phase")
@@ -484,11 +544,17 @@ fun TabletIdeScreen(
                         AgentChatPanel(
                             lines = chatLines,
                             busy = busy,
+                            enhancingPrompt = enhancingPrompt,
                             error = agentError,
                             currentProvider = provider,
                             credentials = credentials,
-                            onSend = { msg ->
-                                agentVm.sendUserMessage(msg, ideVm.buildAgentWorkspaceContext())
+                            composerDraft = composerDraft,
+                            onDraftChange = agentVm::updateComposerDraft,
+                            onSend = {
+                                agentVm.sendComposerDraft(ideVm.buildAgentWorkspaceContext())
+                            },
+                            onEnhancePrompt = {
+                                agentVm.enhanceComposerDraft(ideVm.buildAgentWorkspaceContext())
                             },
                             onClear = agentVm::clearConversation,
                             onProviderChange = agentVm::setProvider,
@@ -504,6 +570,7 @@ fun TabletIdeScreen(
                 KineticStatusBar(
                     activePath = activePath,
                     agentBusy = busy,
+                    gitState = gitRepoState,
                 )
             }
         }
