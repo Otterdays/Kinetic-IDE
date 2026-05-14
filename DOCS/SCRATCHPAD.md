@@ -2,6 +2,16 @@
 
 # SCRATCHPAD — Kinetic
 
+## Session checkpoint — 2026-05-13 (root JDK path corrected)
+
+- **Issue:** Root Gradle / Android Studio sync still pointed at stale JDK path
+  `C:/Program Files/Eclipse Adoptium/jdk-25.0.2.10-hotspot`, causing
+  `org.gradle.java.home` invalid-path failure.
+- **Done:** Updated `gradle.properties` `org.gradle.java.home` and
+  `.vscode/settings.json` Java homes to `C:/Program Files/Java/jdk-25.0.2`
+  / `C:\\Program Files\\Java\\jdk-25.0.2`.
+- **Verify:** `.\gradlew.bat :app:compileDebugKotlin` from repo root **BUILD SUCCESSFUL**.
+
 ## Session checkpoint — 2026-05-13 (startup gateway MVP shipped)
 
 - **Done:** Added a conditional startup route for `MainActivity` / `IdeViewModel`: restoreable sessions
