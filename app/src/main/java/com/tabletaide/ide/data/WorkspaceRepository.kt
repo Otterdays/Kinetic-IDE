@@ -263,22 +263,36 @@ class WorkspaceRepository @Inject constructor(
             }
         }
 
+    fun listDirectoryRows(
+        relativeDirPath: String = "",
+        includeGitMetadata: Boolean = false,
+    ): Result<List<TreeRow>> = runCatching {
+        val trimmed = relativeDirPath.trim('/')
+        val dir = if (trimmed.isEmpty()) {
+            root ?: error("No workspace root")
+        } else {
+            resolveDirectory(trimmed) ?: error("Directory not found: $trimmed")
+        }
+        check(dir.isDirectory) { "Not a directory: ${trimmed.ifBlank { "/" }}" }
+        val depth = if (trimmed.isEmpty()) 0 else trimmed.split('/').count { it.isNotEmpty() }
+        listChildren(dir, trimmed, depth, includeGitMetadata)
+    }
+
     fun listTreeRows(includeGitMetadata: Boolean = false): List<TreeRow> {
         val r = root ?: return emptyList()
         val out = mutableListOf<TreeRow>()
         fun walk(doc: DocumentFile, prefix: String, depth: Int) {
-            val name = doc.name ?: return
-            if (!includeGitMetadata && name == ".git") return
-            val path = if (prefix.isEmpty()) name else "$prefix/$name"
-            val isDir = doc.isDirectory
-            out.add(TreeRow(path = path, uri = doc.uri, displayName = name, isDirectory = isDir, depth = depth))
-            if (isDir) {
-                val kids = doc.listFiles().sortedWith(compareBy({ !it.isDirectory }, { it.name }))
-                kids.forEach { child -> walk(child, path, depth + 1) }
+            val row = toTreeRow(doc, prefix, depth, includeGitMetadata) ?: return
+            out.add(row)
+            if (row.isDirectory) {
+                listChildDocuments(doc, includeGitMetadata).forEach { child ->
+                    walk(child, row.path, depth + 1)
+                }
             }
         }
-        val roots = r.listFiles().sortedWith(compareBy({ !it.isDirectory }, { it.name }))
-        roots.forEach { walk(it, "", 0) }
+        listChildDocuments(r, includeGitMetadata).forEach { child ->
+            walk(child, "", 0)
+        }
         return out
     }
 
@@ -323,6 +337,42 @@ class WorkspaceRepository @Inject constructor(
         if (trimmed.isEmpty()) return r
         val doc = resolveFile(trimmed)
         return doc?.takeIf { it.isDirectory }
+    }
+
+    private fun listChildren(
+        dir: DocumentFile,
+        prefix: String,
+        depth: Int,
+        includeGitMetadata: Boolean,
+    ): List<TreeRow> = listChildDocuments(dir, includeGitMetadata)
+        .mapNotNull { child -> toTreeRow(child, prefix, depth, includeGitMetadata) }
+        .sortedWith(
+            compareBy<TreeRow>({ !it.isDirectory }, { it.displayName.lowercase() }, { it.path.lowercase() }),
+        )
+
+    private fun listChildDocuments(
+        dir: DocumentFile,
+        includeGitMetadata: Boolean,
+    ): List<DocumentFile> = dir.listFiles()
+        .filter { child -> includeGitMetadata || child.name != ".git" }
+        .sortedWith(compareBy({ !it.isDirectory }, { it.name?.lowercase().orEmpty() }, { it.uri.toString() }))
+
+    private fun toTreeRow(
+        doc: DocumentFile,
+        prefix: String,
+        depth: Int,
+        includeGitMetadata: Boolean,
+    ): TreeRow? {
+        val name = doc.name ?: return null
+        if (!includeGitMetadata && name == ".git") return null
+        val path = if (prefix.isEmpty()) name else "$prefix/$name"
+        return TreeRow(
+            path = path,
+            uri = doc.uri,
+            displayName = name,
+            isDirectory = doc.isDirectory,
+            depth = depth,
+        )
     }
 
     private fun joinRelative(parentRelativeTrimmed: String, leaf: String): String {

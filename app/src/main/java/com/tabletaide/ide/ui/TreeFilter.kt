@@ -3,7 +3,7 @@ package com.tabletaide.ide.ui
 import com.tabletaide.ide.data.TreeRow
 
 /** Ordered-character fuzzy match (substring-style) on path + display name. */
-fun pathMatchesExplorerQuery(path: String, displayName: String, query: String): Boolean {
+private fun pathMatchesExplorerQuery(path: String, displayName: String, query: String): Boolean {
     if (query.isBlank()) return true
     val q = query.lowercase().filter { !it.isWhitespace() }
     if (q.isEmpty()) return true
@@ -29,7 +29,7 @@ private fun ancestorPathsOf(relativePath: String): Set<String> {
 }
 
 /** Keeps matched rows plus ancestor folders so the tree stays navigable. */
-fun filterTreeRows(rows: List<TreeRow>, query: String): List<TreeRow> {
+fun filterExplorerItems(rows: List<ExplorerItem>, query: String): List<ExplorerItem> {
     if (query.isBlank()) return rows
     val matched = rows
         .filter { pathMatchesExplorerQuery(it.path, it.displayName, query) }
@@ -41,3 +41,10 @@ fun filterTreeRows(rows: List<TreeRow>, query: String): List<TreeRow> {
     }
     return rows.filter { it.path in keep }
 }
+
+/** Adapter for legacy tree rows used outside the explorer UI state. */
+fun filterTreeRows(rows: List<TreeRow>, query: String): List<TreeRow> =
+    filterExplorerItems(rows.map(ExplorerItem.Companion::from), query)
+        .map { item ->
+            rows.first { row -> row.path == item.path }
+        }

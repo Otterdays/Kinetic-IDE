@@ -16,6 +16,12 @@
 - **[AMENDED 2026-05-14]:** The IDE shell now surfaces inline capability banners when git and/or
   command execution are unavailable for the current workspace, so those constraints are visible before
   the user hits a dialog or disabled action.
+- **[AMENDED 2026-05-14]:** `DOCS/ROADMAP.md` now expands agent telemetry into a lab-grade observability
+  plan covering trace schema, token/cost accounting, privacy/redaction, eval loops, dashboards, export,
+  checkpoints, and first implementation slice.
+- **[AMENDED 2026-05-14]:** Agent telemetry first slice shipped in-app: local JSONL telemetry store,
+  model/tool/approval/mutation/checkpoint/cost event capture, AI-panel rollup strip, rough token/cost
+  estimator with explicit source, and focused codec tests.
 
 ## Snapshot — 2026-03-29
 
@@ -115,3 +121,9 @@
 *[2026-05-14]: [AMENDED] Agent trust controls broadened: persisted **Auto / Ask / Deny** policies now gate file changes and destructive ops, while shell commands intentionally stay **Ask / Deny** only; the approval dialog is generic across risky tools, and chat receipts now include risk, policy, and decision metadata. This remains app-wide/settings-driven rather than a full per-tool or persistent audit system.*
 
 *[2026-05-14]: [AMENDED] Capability clarity pass shipped: `CapabilityBanner` now exposes workspace/git/run limitations inline inside the IDE shell so the user can see that editing + AI context still work even when git and command execution are unavailable for the current location.*
+
+*[2026-05-14]: [AMENDED] Roadmap agent telemetry scope upgraded from cost/token placeholder to lab-grade observability spec: canonical event log, span model, cost/token contracts, redaction/export, benchmark loop, dashboard metrics, acceptance criteria, and first build slice.*
+
+*[2026-05-14]: [AMENDED] Agent telemetry MVP shipped: `AgentTelemetryStore` persists bounded `agent_telemetry.jsonl`, `AgentViewModel` emits session/turn/model/tool/approval/mutation/checkpoint/cost events, `AgentChatPanel` shows session rollup metrics, and `AgentTelemetryCodecTest` verifies summary math, JSON round-trip, and estimator source.
+
+*[2026-05-14]: [AMENDED] Persistent audit timeline shipped: `AgentAuditStore` persists every agent tool invocation to `agent_audit.jsonl`, and `AuditTimelinePanel` provides a dedicated dialog (command palette → Audit timeline) with expandable entry cards showing tool name, target, status, risk, policy, approval, duration, and mutation summary. This closes the "persistent audit log" slice from ROADMAP item #1 of the natural next slices; filter/sort and export remain future work.*

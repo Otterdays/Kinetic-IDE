@@ -38,12 +38,12 @@ import com.tabletaide.ide.data.RecentWorkspaceEntry
 import com.tabletaide.ide.data.RecentWorkspacesStore
 import com.tabletaide.ide.data.RunCommandDialogState
 import com.tabletaide.ide.data.StarterProjectTemplate
-import com.tabletaide.ide.data.TreeRow
 import com.tabletaide.ide.data.WorkspaceMutationBus
 import com.tabletaide.ide.data.WorkspaceRepository
 import com.tabletaide.ide.ui.theme.KineticThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,6 +54,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 data class EditorTab(
@@ -140,15 +141,14 @@ class IdeViewModel @Inject constructor(
     private val _status = MutableStateFlow<String?>(null)
     val status: StateFlow<String?> = _status.asStateFlow()
 
-    private val _tree = MutableStateFlow<List<TreeRow>>(emptyList())
-    val tree: StateFlow<List<TreeRow>> = _tree.asStateFlow()
-
     private val _explorerTreeFilterQuery = MutableStateFlow("")
     val explorerTreeFilterQuery: StateFlow<String> = _explorerTreeFilterQuery.asStateFlow()
 
-    private val _filteredTree = MutableStateFlow<List<TreeRow>>(emptyList())
-    /** Explorer rows after `explorerTreeFilterQuery` ([TRACE: DOCS/ROADMAP.md] Epic 1.2 virtualization). */
-    val filteredTree: StateFlow<List<TreeRow>> = _filteredTree.asStateFlow()
+    private val _explorerTreeUiState = MutableStateFlow(
+        ExplorerTreeUiState(emptyMessage = "Open a folder to browse files."),
+    )
+    /** Explorer rows after incremental loading + optional filter mode ([TRACE: DOCS/ROADMAP.md] Epic 1.2). */
+    val explorerTreeUiState: StateFlow<ExplorerTreeUiState> = _explorerTreeUiState.asStateFlow()
 
     /** Bumps when undo stacks change without tab.content changing (Compose refresh). */
     private val _undoRedoEpoch = MutableStateFlow(0L)
@@ -158,7 +158,14 @@ class IdeViewModel @Inject constructor(
     private val redoByPath = mutableMapOf<String, ArrayDeque<String>>()
     private val burstBaselineByPath = mutableMapOf<String, String>()
     private val burstJobs = mutableMapOf<String, Job>()
+    private val explorerNodesByPath = linkedMapOf<String, ExplorerTreeNode>()
+    private val rootExplorerPaths = mutableListOf<String>()
+    private val expandedExplorerDirectories = mutableSetOf<String>()
+    private val loadingExplorerDirectories = mutableSetOf<String>()
     private var gitRefreshJob: Job? = null
+    private var explorerTreeJob: Job? = null
+    private var explorerFilterJob: Job? = null
+    private var rootExplorerLoaded = false
     private var gitRepository: GitRepositoryReady? = null
     private var gitSnapshot: GitStatusSnapshot? = null
 
@@ -169,7 +176,7 @@ class IdeViewModel @Inject constructor(
                 if (idx >= 0 && !_tabs.value[idx].dirty) {
                     reloadTabAt(idx)
                 }
-                refreshTree()
+                refreshExplorerBranchForPath(path)
             }
             .launchIn(viewModelScope)
         commandRunner.events
@@ -244,11 +251,236 @@ class IdeViewModel @Inject constructor(
 
     fun setExplorerTreeFilterQuery(query: String) {
         _explorerTreeFilterQuery.value = query
-        recomputeFilteredExplorerRows()
+        if (!workspace.hasRoot()) {
+            _explorerTreeUiState.value = ExplorerTreeUiState(
+                emptyMessage = "Open a folder to browse files.",
+                filterActive = query.isNotBlank(),
+            )
+            return
+        }
+        if (query.isBlank()) {
+            explorerFilterJob?.cancel()
+            recomputeExplorerTreeUiState()
+        } else {
+            reloadFilteredExplorerRows()
+        }
     }
 
-    private fun recomputeFilteredExplorerRows() {
-        _filteredTree.value = filterTreeRows(_tree.value, _explorerTreeFilterQuery.value)
+    fun toggleExplorerDirectory(path: String) {
+        if (_explorerTreeFilterQuery.value.isNotBlank()) return
+        val node = explorerNodesByPath[path] ?: return
+        if (!node.item.isDirectory) return
+        if (!expandedExplorerDirectories.add(path)) {
+            expandedExplorerDirectories.remove(path)
+            recomputeExplorerTreeUiState()
+            return
+        }
+        recomputeExplorerTreeUiState()
+        if (!node.childrenLoaded) {
+            loadExplorerChildren(path, force = true)
+        }
+    }
+
+    private fun resetExplorerTreeModel() {
+        explorerTreeJob?.cancel()
+        explorerFilterJob?.cancel()
+        explorerNodesByPath.clear()
+        rootExplorerPaths.clear()
+        expandedExplorerDirectories.clear()
+        loadingExplorerDirectories.clear()
+        rootExplorerLoaded = false
+        _explorerTreeUiState.value = ExplorerTreeUiState(
+            emptyMessage = if (workspace.hasRoot()) null else "Open a folder to browse files.",
+        )
+    }
+
+    private fun loadExplorerRoot(force: Boolean = false) {
+        if (!workspace.hasRoot()) {
+            resetExplorerTreeModel()
+            return
+        }
+        if (!force && rootExplorerLoaded) {
+            recomputeExplorerTreeUiState()
+            return
+        }
+        explorerTreeJob?.cancel()
+        _explorerTreeUiState.update { it.copy(loading = true, emptyMessage = null, filterActive = false) }
+        explorerTreeJob = viewModelScope.launch {
+            val rows = withContext(Dispatchers.IO) { workspace.listDirectoryRows() }
+            rows.fold(
+                onSuccess = { treeRows ->
+                    rootExplorerLoaded = true
+                    replaceExplorerChildren(
+                        parentPath = null,
+                        children = treeRows.map(ExplorerItem.Companion::from),
+                    )
+                    recomputeExplorerTreeUiState()
+                },
+                onFailure = {
+                    _status.value = it.message ?: "Could not load workspace tree."
+                    _explorerTreeUiState.value = ExplorerTreeUiState(
+                        loading = false,
+                        emptyMessage = "Could not load workspace tree.",
+                    )
+                },
+            )
+        }
+    }
+
+    private fun loadExplorerChildren(path: String, force: Boolean = false) {
+        val node = explorerNodesByPath[path] ?: return
+        if (!node.item.isDirectory) return
+        if (!force && node.childrenLoaded) {
+            recomputeExplorerTreeUiState()
+            return
+        }
+        if (!loadingExplorerDirectories.add(path)) return
+        recomputeExplorerTreeUiState()
+        viewModelScope.launch {
+            val rows = withContext(Dispatchers.IO) { workspace.listDirectoryRows(path) }
+            loadingExplorerDirectories.remove(path)
+            rows.fold(
+                onSuccess = { treeRows ->
+                    replaceExplorerChildren(
+                        parentPath = path,
+                        children = treeRows.map(ExplorerItem.Companion::from),
+                    )
+                    recomputeExplorerTreeUiState()
+                },
+                onFailure = {
+                    _status.value = it.message ?: "Could not load $path"
+                    recomputeExplorerTreeUiState()
+                },
+            )
+        }
+    }
+
+    private fun reloadFilteredExplorerRows() {
+        val query = _explorerTreeFilterQuery.value
+        if (query.isBlank()) {
+            recomputeExplorerTreeUiState()
+            return
+        }
+        explorerFilterJob?.cancel()
+        _explorerTreeUiState.update { it.copy(loading = true, emptyMessage = null, filterActive = true) }
+        explorerFilterJob = viewModelScope.launch {
+            val capturedQuery = query
+            val filtered = withContext(Dispatchers.IO) {
+                val rows = workspace.listTreeRows().map(ExplorerItem.Companion::from)
+                filterExplorerItems(rows, capturedQuery)
+            }
+            if (_explorerTreeFilterQuery.value != capturedQuery) return@launch
+            _explorerTreeUiState.value = ExplorerTreeUiState(
+                rows = filtered.map { item ->
+                    ExplorerVisibleRow(
+                        item = item,
+                        canExpand = false,
+                    )
+                },
+                loading = false,
+                emptyMessage = if (filtered.isEmpty()) {
+                    "No files or folders match \"$capturedQuery\"."
+                } else {
+                    null
+                },
+                filterActive = true,
+            )
+        }
+    }
+
+    private fun recomputeExplorerTreeUiState() {
+        val rows = buildVisibleExplorerRows(
+            rootPaths = rootExplorerPaths.toList(),
+            nodes = explorerNodesByPath,
+            expandedPaths = expandedExplorerDirectories,
+            loadingPaths = loadingExplorerDirectories,
+        )
+        val loading = !rootExplorerLoaded || loadingExplorerDirectories.isNotEmpty()
+        _explorerTreeUiState.value = ExplorerTreeUiState(
+            rows = rows,
+            loading = loading,
+            emptyMessage = when {
+                !workspace.hasRoot() -> "Open a folder to browse files."
+                rows.isEmpty() && !loading -> "This workspace is empty."
+                else -> null
+            },
+            filterActive = false,
+        )
+    }
+
+    private fun replaceExplorerChildren(parentPath: String?, children: List<ExplorerItem>) {
+        val sortedChildren = sortExplorerItems(children)
+        val previousChildren = if (parentPath == null) {
+            rootExplorerPaths.toList()
+        } else {
+            explorerNodesByPath[parentPath]?.childPaths.orEmpty()
+        }
+        val nextChildPaths = sortedChildren.map { it.path }
+        previousChildren
+            .filterNot(nextChildPaths::contains)
+            .forEach(::removeExplorerSubtree)
+
+        sortedChildren.forEach { child ->
+            val existing = explorerNodesByPath[child.path]
+            explorerNodesByPath[child.path] = ExplorerTreeNode(
+                item = child,
+                childPaths = if (child.isDirectory) existing?.childPaths.orEmpty() else emptyList(),
+                childrenLoaded = child.isDirectory && existing?.childrenLoaded == true,
+            )
+        }
+
+        if (parentPath == null) {
+            rootExplorerPaths.clear()
+            rootExplorerPaths.addAll(nextChildPaths)
+            return
+        }
+
+        val parentNode = explorerNodesByPath[parentPath] ?: return
+        explorerNodesByPath[parentPath] = parentNode.copy(
+            childPaths = nextChildPaths,
+            childrenLoaded = true,
+        )
+    }
+
+    private fun removeExplorerSubtree(path: String) {
+        val node = explorerNodesByPath.remove(path) ?: return
+        node.childPaths.forEach(::removeExplorerSubtree)
+        expandedExplorerDirectories.remove(path)
+        loadingExplorerDirectories.remove(path)
+    }
+
+    private fun refreshExplorerBranchForPath(path: String) {
+        if (!workspace.hasRoot()) {
+            resetExplorerTreeModel()
+            return
+        }
+        if (_explorerTreeFilterQuery.value.isNotBlank()) {
+            reloadFilteredExplorerRows()
+            refreshGitState()
+            return
+        }
+        val parentPath = path.substringBeforeLast('/', "")
+        val refreshTarget = nearestLoadedExplorerDirectory(parentPath)
+        if (refreshTarget == null) {
+            loadExplorerRoot(force = true)
+        } else if (refreshTarget.isEmpty()) {
+            loadExplorerRoot(force = true)
+        } else {
+            loadExplorerChildren(refreshTarget, force = true)
+        }
+        refreshGitState()
+    }
+
+    private fun nearestLoadedExplorerDirectory(path: String): String? {
+        var current = path.trim('/')
+        while (true) {
+            if (current.isEmpty()) {
+                return if (rootExplorerLoaded) "" else null
+            }
+            val node = explorerNodesByPath[current]
+            if (node?.childrenLoaded == true) return current
+            current = current.substringBeforeLast('/', "")
+        }
     }
 
     fun canUndo(): Boolean {
@@ -321,6 +553,7 @@ class IdeViewModel @Inject constructor(
         undoByPath.clear()
         redoByPath.clear()
         workspace.setRootFromUri(treeUri)
+        resetExplorerTreeModel()
         explorerPins.bindWorkspace(treeUri)
         commandRunner.bindWorkspace(treeUri)
         recentWorkspacesStore.recordWorkspace(treeUri, workspace.displayNameForTreeUri(treeUri))
@@ -342,6 +575,7 @@ class IdeViewModel @Inject constructor(
         if (!_hasPersistPermission(snapshot.workspaceUri)) return false
         val uri = Uri.parse(snapshot.workspaceUri)
         workspace.setRootFromUri(uri)
+        resetExplorerTreeModel()
         recentWorkspacesStore.recordWorkspace(uri, workspace.displayNameForTreeUri(uri))
         refreshTree()
         val restored = snapshot.tabs.map { row ->
@@ -811,8 +1045,13 @@ class IdeViewModel @Inject constructor(
     }
 
     fun refreshTree() {
-        _tree.value = workspace.listTreeRows()
-        recomputeFilteredExplorerRows()
+        if (!workspace.hasRoot()) {
+            resetExplorerTreeModel()
+        } else if (_explorerTreeFilterQuery.value.isBlank()) {
+            loadExplorerRoot(force = true)
+        } else {
+            reloadFilteredExplorerRows()
+        }
         refreshGitState()
     }
 
@@ -893,6 +1132,8 @@ class IdeViewModel @Inject constructor(
         val existing = _tabs.value.indexOfFirst { it.path == path }
         if (existing >= 0) {
             _selectedTabIndex.value = existing
+            expandExplorerAncestors(path)
+            refreshExplorerBranchForPath(path)
             return
         }
         workspace.readText(path).fold(
@@ -912,6 +1153,8 @@ class IdeViewModel @Inject constructor(
                 _selectedTabIndex.value = _tabs.value.lastIndex
                 _status.value = null
                 explorerPins.recordFileOpened(path)
+                expandExplorerAncestors(path)
+                refreshExplorerBranchForPath(path)
                 bumpUndoRedo()
                 persistDraftIfPossible()
             },
@@ -921,16 +1164,25 @@ class IdeViewModel @Inject constructor(
         )
     }
 
-    fun openOrSelectFile(row: TreeRow) {
-        if (row.isDirectory) return
-        val existing = _tabs.value.indexOfFirst { it.path == row.path }
+    private fun expandExplorerAncestors(path: String) {
+        var current = path.trim('/').substringBeforeLast('/', "")
+        while (current.isNotEmpty()) {
+            expandedExplorerDirectories.add(current)
+            current = current.substringBeforeLast('/', "")
+        }
+    }
+
+    fun openOrSelectFile(item: ExplorerItem) {
+        if (item.isDirectory) return
+        val existing = _tabs.value.indexOfFirst { it.path == item.path }
         if (existing >= 0) {
             selectTab(existing)
-            explorerPins.recordFileOpened(row.path)
+            explorerPins.recordFileOpened(item.path)
+            expandExplorerAncestors(item.path)
             return
         }
         viewModelScope.launch {
-            openOrSelectRelativePath(row.path, row.displayName)
+            openOrSelectRelativePath(item.path, item.displayName)
         }
     }
 
@@ -980,7 +1232,6 @@ class IdeViewModel @Inject constructor(
                     }
                     redoByPath[tab.path]?.clear()
                     bumpUndoRedo()
-                    refreshTree()
                     closeTabUnchecked(index)
                     persistDraftIfPossible()
                     _status.value = "Saved ${tab.fileName}"
@@ -1060,7 +1311,8 @@ class IdeViewModel @Inject constructor(
         viewModelScope.launch {
             workspace.createEmptyFile(parentDirRelativeOrEmpty.trim('/'), leafName).fold(
                 onSuccess = { path ->
-                    refreshTree()
+                    expandExplorerAncestors(path)
+                    refreshExplorerBranchForPath(path)
                     openOrSelectRelativePath(path, leafName.trim())
                     persistDraftIfPossible()
                     _status.value = "Created $leafName"
@@ -1073,9 +1325,11 @@ class IdeViewModel @Inject constructor(
     fun explorerCreateFolder(relativeFolderPath: String) {
         if (!workspace.hasRoot()) return
         viewModelScope.launch {
-            workspace.createDirectory(relativeFolderPath.trim('/')).fold(
+            val targetPath = relativeFolderPath.trim('/')
+            workspace.createDirectory(targetPath).fold(
                 onSuccess = {
-                    refreshTree()
+                    expandExplorerAncestors(targetPath)
+                    refreshExplorerBranchForPath(targetPath)
                     persistDraftIfPossible()
                     _status.value = "Created folder"
                 },
@@ -1084,13 +1338,13 @@ class IdeViewModel @Inject constructor(
         }
     }
 
-    fun explorerRename(row: TreeRow, newLeafName: String) {
+    fun explorerRename(item: ExplorerItem, newLeafName: String) {
         if (!workspace.hasRoot()) return
         viewModelScope.launch {
-            workspace.renameLeaf(row.path, newLeafName.trim()).fold(
+            workspace.renameLeaf(item.path, newLeafName.trim()).fold(
                 onSuccess = { newRel ->
                     val nm = newRel.substringAfterLast('/')
-                    val oldPath = row.path
+                    val oldPath = item.path
                     remapEditorStacks(oldPath, newRel)
                     _tabs.update { tabs ->
                         tabs.map { t ->
@@ -1098,7 +1352,8 @@ class IdeViewModel @Inject constructor(
                             else t.copy(path = newRel, fileName = nm)
                         }
                     }
-                    refreshTree()
+                    expandExplorerAncestors(newRel)
+                    refreshExplorerBranchForPath(newRel)
                     persistDraftIfPossible()
                     explorerPins.renameTrackedPath(oldPath, newRel)
                     _status.value = "Renamed to $nm"
@@ -1108,12 +1363,13 @@ class IdeViewModel @Inject constructor(
         }
     }
 
-    fun explorerDuplicateFile(row: TreeRow) {
-        if (!workspace.hasRoot() || row.isDirectory) return
+    fun explorerDuplicateFile(item: ExplorerItem) {
+        if (!workspace.hasRoot() || item.isDirectory) return
         viewModelScope.launch {
-            workspace.duplicateFile(row.path).fold(
+            workspace.duplicateFile(item.path).fold(
                 onSuccess = { path ->
-                    refreshTree()
+                    expandExplorerAncestors(path)
+                    refreshExplorerBranchForPath(path)
                     openOrSelectRelativePath(path, path.substringAfterLast('/'))
                     _status.value = "Duplicated"
                 },
@@ -1122,19 +1378,19 @@ class IdeViewModel @Inject constructor(
         }
     }
 
-    fun explorerDelete(row: TreeRow) {
+    fun explorerDelete(item: ExplorerItem) {
         if (!workspace.hasRoot()) return
         viewModelScope.launch {
-            workspace.deleteNode(row.path).fold(
+            workspace.deleteNode(item.path).fold(
                 onSuccess = {
-                    val ix = _tabs.value.indexOfFirst { it.path == row.path }
+                    val ix = _tabs.value.indexOfFirst { it.path == item.path }
                     if (ix >= 0) {
                         closeTabUnchecked(ix)
                     }
-                    refreshTree()
+                    refreshExplorerBranchForPath(item.path)
                     persistDraftIfPossible()
-                    explorerPins.removeTrackedPath(row.path, row.isDirectory)
-                    _status.value = "Deleted ${row.displayName}"
+                    explorerPins.removeTrackedPath(item.path, item.isDirectory)
+                    _status.value = "Deleted ${item.displayName}"
                 },
                 onFailure = { _status.value = it.message },
             )
@@ -1175,7 +1431,6 @@ class IdeViewModel @Inject constructor(
             }
             if (failures == 0) {
                 _status.value = "Saved ${indices.size} file(s)"
-                refreshTree()
             }
             persistDraftIfPossible()
         }
@@ -1299,7 +1554,6 @@ class IdeViewModel @Inject constructor(
                     redoByPath[tab.path]?.clear()
                     bumpUndoRedo()
                     _status.value = "Saved ${tab.fileName}"
-                    refreshTree()
                     persistDraftIfPossible()
                 },
                 onFailure = { _status.value = it.message },

@@ -2,6 +2,53 @@
 
 # SCRATCHPAD — Kinetic
 
+## Session checkpoint — 2026-05-14 (persistent audit timeline shipped)
+
+- **Done:** Added persistent audit timeline UI as the next natural roadmap slice:
+  `AuditTimelinePanel` is a Dialog-based composable showing `AgentAuditStore` entries in a
+  scrollable, expandable timeline. Each card shows tool name, target, status (with color dot),
+  risk class, policy mode, approval outcome, duration, and mutation summary — collapsed by
+  default, expandable on tap.
+- **Done:** Wired `AgentViewModel` with `loadAuditEntries()` and `clearAuditEntries()` state/actions;
+  entries load on panel open via `LaunchedEffect`.
+- **Done:** Added `Audit timeline` command palette entry (keywords: audit, history, log, agent,
+  timeline, receipt) wired to the panel visibility state.
+- **Done:** Panel keyboard-guard added so shortcuts do not fire while the audit dialog is open.
+- **Verify:** `.\gradlew.bat :app:compileDebugKotlin` from repo root **BUILD SUCCESSFUL**.
+- **Docs:** `DOCS/ROADMAP.md` marks persistent audit timeline as partial MVP (filter/sort/export
+  still `[ ]`); `DOCS/CHANGELOG.md` and `DOCS/SUMMARY.md` amended.
+- **Known limitation:** No filter/sort controls in the panel yet — entries are shown newest-first
+  with the full list loaded on open. No export/redaction for audit entries.
+- **Next:** Either filter/sort for the audit panel, or the next roadmap slice (LSP MVP for Kotlin).
+
+## Session checkpoint — 2026-05-14 (tree wrap-up shipped)
+
+- **Done:** Replaced the explorer’s eager full-tree browse path with an incremental node model:
+  `WorkspaceRepository.listDirectoryRows(...)`, `IdeViewModel` root/subtree loading, visible-row
+  derivation, and branch-local refresh after file mutations.
+- **Done:** `FileTreePane` now renders explorer-specific visible rows with folder expand/collapse plus
+  explicit loading, empty-workspace, and filter-empty states without disturbing STARRED / RECENT pins.
+- **Done:** Added focused local unit tests for explorer filtering and pure tree row visibility/sorting,
+  then verified with `.\gradlew.bat :app:compileDebugKotlin :app:testDebugUnitTest` from repo root
+  (**BUILD SUCCESSFUL**).
+- **Known limitation:** Query mode still materializes the full tree while a filter is active; that is
+  now a follow-up optimization rather than the default browse-path behavior.
+- **Next:** If we want a richer “tree visualization” later, build it as a separate read-only surface
+  backed by the same explorer node model instead of replacing the main Explorer pane.
+
+## Session checkpoint — 2026-05-14 (tree wrap-up in progress)
+
+- **In progress:** Replacing the explorer’s eager full-tree materialization with an incremental
+  node model: root/subdirectory loading, visible-row derivation, and branch-local refreshes now live
+  in `IdeViewModel` on top of a new `WorkspaceRepository.listDirectoryRows(...)` API.
+- **In progress:** `FileTreePane` is being moved from raw `TreeRow` rendering to explorer-specific
+  visible rows so folder expand/collapse, loading states, and empty/filter-empty messaging can ship
+  without changing agent/file-tool internals.
+- **In progress:** Added minimal local unit-test scaffolding (`junit:junit`) plus RED tests for the
+  new explorer model/filter helpers before finishing the production implementation.
+- **Next:** Run the new unit target, fix compile/runtime issues from the model/UI refactor, then update
+  `DOCS/ROADMAP.md` + `DOCS/CHANGELOG.md` once the tree slice is green.
+
 ## Session checkpoint — 2026-05-14 (docs truth pass shipped)
 
 - **Done:** Updated `README.md` to reflect the current MVP instead of older Phase 1 / terminal-stub
@@ -493,3 +540,21 @@
 ---
 
 *[2026-03-28]: Scratchpad initialized.*
+
+## Session checkpoint — 2026-05-14 (agent telemetry MVP shipped)
+
+- **Done:** Added `AgentTelemetryStore`, `TelemetryEvent`, and `AgentTelemetryCodec` with bounded
+  local `agent_telemetry.jsonl` persistence, stable schema version, sequence ids, payload hashes,
+  rough token/cost estimator, and summary rollups.
+- **Done:** Instrumented `AgentViewModel` around the existing agent loop: session/turn start, context
+  build, prompt send, model completion, tool request/start/complete, approval wait/decision,
+  checkpoint create/restore, mutation apply/revert, cost estimate, and errors.
+- **Done:** Added an AI-panel telemetry strip in `AgentChatPanel` showing turns, events, estimated
+  tokens/cost, average first-token latency, p95 tool latency, failures, and last event.
+- **Done:** Added focused `AgentTelemetryCodecTest` coverage plus `org.json:json` test dependency so
+  local unit tests exercise real JSON behavior.
+- **Verify:** `.\gradlew.bat :app:testDebugUnitTest --tests com.tabletaide.ide.data.AgentTelemetryCodecTest`
+  from repo root **BUILD SUCCESSFUL**.
+- **Known limitation:** Usage/cost remains rough estimator only; full trace drawer, redacted export,
+  retention controls, dashboard screen, pricing-table reconciliation, and benchmark runner remain
+  roadmap work.

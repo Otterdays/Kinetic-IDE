@@ -1,6 +1,7 @@
 package com.tabletaide.ide.ui
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.DataObject
@@ -15,9 +16,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import com.tabletaide.ide.data.TreeRow
 
 /** Picks an icon by name / extension; folders always use [Icons.Filled.Folder]. */
-fun iconForTreeRow(row: TreeRow): ImageVector {
-    if (row.isDirectory) return Icons.Filled.Folder
-    val name = row.displayName.lowercase()
+fun iconForTreeRow(row: TreeRow): ImageVector =
+    iconForExplorerItem(ExplorerItem.from(row))
+
+/** Pure explorer-item overload so unit-tested tree state does not depend on Android Uri. */
+fun iconForExplorerItem(item: ExplorerItem): ImageVector {
+    if (item.isDirectory) return Icons.Filled.Folder
+    val name = item.displayName.lowercase()
     if (name.endsWith(".gradle.kts") || name.endsWith(".gradle")) return Icons.Filled.Settings
     val dot = name.lastIndexOf('.')
     val ext = if (dot in 1 until name.lastIndex) name.substring(dot + 1) else ""
@@ -34,6 +39,6 @@ fun iconForTreeRow(row: TreeRow): ImageVector {
         "mp4", "webm", "mkv", "mov" -> Icons.Filled.VideoFile
         "sh", "bash", "zsh", "fish", "bat", "cmd", "ps1" -> Icons.Filled.Terminal
         "properties", "pro", "env" -> Icons.Filled.Settings
-        else -> Icons.Filled.InsertDriveFile
+        else -> Icons.AutoMirrored.Filled.InsertDriveFile
     }
 }

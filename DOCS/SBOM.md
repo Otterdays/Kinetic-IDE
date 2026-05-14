@@ -44,9 +44,16 @@
 | androidx.compose.ui:ui-tooling | via BOM | debugImplementation |
 | androidx.compose.ui:ui-test-manifest | via BOM | debugImplementation |
 | androidx.compose:compose-bom | 2024.12.01 | androidTestImplementation |
+| junit:junit | 4.13.2 | testImplementation |
+| org.json:json | 20250517 | testImplementation |
 
 ## Notes
 
+- 2026-05-14 tree wrap-up slice: added `junit:junit:4.13.2` as a minimal local unit-test dependency
+  for new explorer tree model/filter coverage. No runtime dependency or plugin version changes.
+- 2026-05-14 agent telemetry MVP: added `org.json:json:20250517` as a local unit-test dependency so
+  telemetry codec tests exercise real JVM `JSONObject` behavior instead of Android's mocked test stub.
+  Runtime telemetry uses the existing Android platform JSON classes; no new runtime dependency.
 - 2026-05-14 capability-banner + docs-truth pass: no dependency or plugin version changes.
 - Source of truth: `settings.gradle.kts`, `app/build.gradle.kts`, `app/settings.gradle.kts`, `gradle/wrapper/gradle-wrapper.properties`.
 - 2026-05-14 trust policy layer: no dependency or plugin version changes. Adds a SharedPreferences-

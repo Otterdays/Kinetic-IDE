@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.\\\\gradlew.bat :app:compileDebugKotlin)",
+      "PowerShell(.\\\\gradlew.bat :app:compileDebugKotlin 2>&1)"
+    ]
+  }
+}

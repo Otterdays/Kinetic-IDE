@@ -66,6 +66,39 @@ fun AgentToolApprovalDialog(
                     modifier = Modifier.padding(top = 10.dp),
                     color = MaterialTheme.colorScheme.primary,
                 )
+                approvalState.commandPreview?.let { preview ->
+                    Text(
+                        text = "Risk: ${preview.level.displayName}",
+                        modifier = Modifier.padding(top = 10.dp),
+                        color = when (preview.level) {
+                            com.tabletaide.ide.data.CommandRiskLevel.HIGH -> MaterialTheme.colorScheme.error
+                            com.tabletaide.ide.data.CommandRiskLevel.MEDIUM -> MaterialTheme.colorScheme.tertiary
+                            com.tabletaide.ide.data.CommandRiskLevel.LOW -> MaterialTheme.colorScheme.primary
+                        },
+                    )
+                    preview.reasons.forEach { reason ->
+                        Text(
+                            text = "• $reason",
+                            color = KineticColors.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                    if (preview.likelyTargets.isNotEmpty()) {
+                        Text(
+                            text = "Likely targets:",
+                            color = KineticColors.outline,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                        preview.likelyTargets.take(6).forEach { target ->
+                            Text(
+                                text = target,
+                                fontFamily = FontFamily.Monospace,
+                                color = KineticColors.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                        }
+                    }
+                }
                 Text(
                     text = approvalState.assistantExplanation,
                     color = KineticColors.onSurface,

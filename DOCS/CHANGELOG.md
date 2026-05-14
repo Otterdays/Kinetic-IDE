@@ -10,6 +10,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **[ROADMAP Natural next slice / Persistent audit timeline]** Added a dedicated `AuditTimelinePanel`
+  that surfaces the `AgentAuditStore` JSONL entries in a browsable dialog: expandable cards show tool
+  name, target, status, risk, policy, approval, duration, and mutation summary. Accessible from the
+  command palette with fuzzy filtering. Entries load on open and can be cleared from the panel.
+
+- **[ROADMAP Epic 2.2 / Agent telemetry]** Expanded `DOCS/ROADMAP.md` with a lab-grade agent
+  telemetry, evaluation, and audit observability spec: product surfaces, canonical event schema,
+  token/cost accounting contracts, privacy/redaction rules, eval/regression loop, engineering
+  architecture, acceptance criteria, and first implementation slice.
+
+- **[ROADMAP Epic 2.2 / Agent telemetry]** Added first in-app telemetry slice:
+  `AgentTelemetryStore`, `TelemetryEvent`, `AgentTelemetryCodec`, and `agent_telemetry.jsonl`
+  persistence with bounded local retention and summary rollups.
+
+- **[ROADMAP Epic 2.2 / Agent telemetry]** Instrumented `AgentViewModel` to emit session, turn,
+  context, prompt, model-completion, tool, approval, checkpoint, mutation, cost-estimate, and error
+  events around the existing agent/tool loop.
+
+- **[ROADMAP Epic 2.2 / Agent telemetry]** Added an AI-panel telemetry strip that surfaces turn/event
+  counts, rough token/cost estimates, average first-token latency, p95 tool latency, failure count,
+  and last telemetry event without requiring a separate debug screen.
+
+- **[ROADMAP Epic 2.2 / Agent telemetry]** Added focused telemetry codec tests for summary
+  aggregation, JSON round-trip, and explicit rough-estimator source.
+
+- **[ROADMAP Epic 1.2 / tree wrap-up]** Added an incremental explorer tree browse path:
+  `WorkspaceRepository.listDirectoryRows(...)`, `ExplorerTreeModels`, branch-local refresh logic in
+  `IdeViewModel`, folder expand/collapse in `FileTreePane`, and explicit loading / empty /
+  filter-empty explorer states. Normal browsing no longer depends on eagerly materializing the full
+  SAF tree up front.
+
+- **[ROADMAP Epic 1.2 / tree wrap-up]** Added focused local unit coverage for the explorer tree slice:
+  fuzzy filter ancestor retention plus pure explorer row sorting/visibility behavior for collapsed vs
+  expanded trees.
+
 - **[ROADMAP Epic 1.3 / capability clarity]** Added inline IDE-shell capability banners so users can
   see when editing + AI workspace context are available but git and/or command execution remain
   unavailable for the current workspace location.
@@ -162,6 +197,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `ToolRouter` `search_files` match cap loop: `break@outer` replaces invalid `return@outer` (compile error).
 
 ### Changed
+
+- **[ROADMAP Epic 1.2 / tree wrap-up]** Explorer filtering is still available, but it now sits on top
+  of the incremental browse model: normal navigation loads root/expanded folders only, while query mode
+  intentionally falls back to a full-tree scan for simpler fuzzy-match semantics.
 
 - **Docs truth pass:** `README.md`, `DOCS/SUMMARY.md`, and `DOCS/ROADMAP.md` now describe the current
   MVP accurately: real startup clone/auth flow, real git commit/push, trust controls, inline

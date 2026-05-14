@@ -43,6 +43,8 @@ data class AgentToolApprovalState(
     val inputJson: String = "",
     val assistantExplanation: String = "",
     val policyMode: AgentToolPolicyMode = AgentToolPolicyMode.ASK,
+    /** Set when [toolName] is `run_command`; null otherwise. */
+    val commandPreview: CommandPreview? = null,
 )
 
 data class CommandExecutionResult(

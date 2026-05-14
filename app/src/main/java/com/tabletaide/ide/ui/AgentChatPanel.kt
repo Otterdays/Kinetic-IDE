@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -47,7 +48,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tabletaide.ide.data.LlmCredentialState
 import com.tabletaide.ide.data.LlmProvider
+import com.tabletaide.ide.data.TelemetrySummary
 import com.tabletaide.ide.ui.theme.KineticColors
+import java.util.Locale
 
 @Composable
 fun AgentChatPanel(
@@ -57,6 +60,7 @@ fun AgentChatPanel(
     error: String?,
     currentProvider: LlmProvider,
     credentials: LlmCredentialState,
+    telemetrySummary: TelemetrySummary,
     composerDraft: String,
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit,
@@ -67,6 +71,9 @@ fun AgentChatPanel(
     /** Workspace-relative revert for captured write/edit tool rows ([TRACE: DOCS/ROADMAP.md] Epic 2.2). */
     onRevertToolMutation: (String) -> Unit,
     onApplyToolMutation: (String) -> Unit,
+    /** Restore workspace state from before a `run_command` execution. */
+    onRevertCommandMutation: (String) -> Unit,
+    onReapplyCommandMutation: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var providerMenuOpen by remember { mutableStateOf(false) }
@@ -185,6 +192,10 @@ fun AgentChatPanel(
                     modifier = Modifier.padding(top = 6.dp),
                 )
             }
+            TelemetrySummaryStrip(
+                summary = telemetrySummary,
+                modifier = Modifier.padding(top = 10.dp),
+            )
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -288,6 +299,72 @@ fun AgentChatPanel(
                             )
                             if (expanded) {
                                 ToolReceiptView(line.receipt)
+                                val cmd = line.commandMutation
+                                if (cmd != null && line.receipt.status == "OK") {
+                                    Column(modifier = Modifier.padding(top = 8.dp)) {
+                                        Text(
+                                            "WORKSPACE CHANGES · ${cmd.diff.summary()}",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = KineticColors.outline,
+                                        )
+                                        val changedPreview = (cmd.diff.added.map { "+ $it" } +
+                                            cmd.diff.modified.map { "~ $it" } +
+                                            cmd.diff.deleted.map { "- $it" }).take(8)
+                                        changedPreview.forEach { lineText ->
+                                            Text(
+                                                lineText,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 10.sp,
+                                                color = KineticColors.onSurfaceVariant,
+                                                modifier = Modifier.padding(top = 2.dp),
+                                            )
+                                        }
+                                        val total = cmd.diff.added.size + cmd.diff.modified.size + cmd.diff.deleted.size
+                                        if (total > changedPreview.size) {
+                                            Text(
+                                                "… +${total - changedPreview.size} more",
+                                                fontSize = 10.sp,
+                                                color = KineticColors.outline,
+                                                modifier = Modifier.padding(top = 2.dp),
+                                            )
+                                        }
+                                        when (cmd.phase) {
+                                            AgentViewModel.CommandMutationPhase.APPLIED_ON_DISK -> {
+                                                TextButton(
+                                                    onClick = { onRevertCommandMutation(line.id) },
+                                                    enabled = !busy,
+                                                ) {
+                                                    Text("Revert command changes", fontSize = 11.sp)
+                                                }
+                                            }
+                                            AgentViewModel.CommandMutationPhase.REVERTED -> {
+                                                TextButton(
+                                                    onClick = { onReapplyCommandMutation(line.id) },
+                                                    enabled = !busy,
+                                                ) {
+                                                    Text("Reapply command changes", fontSize = 11.sp)
+                                                }
+                                            }
+                                            AgentViewModel.CommandMutationPhase.CONFLICT -> {
+                                                Text(
+                                                    "Conflicts blocked some restores. Manual review needed.",
+                                                    color = MaterialTheme.colorScheme.error,
+                                                    fontSize = 11.sp,
+                                                    modifier = Modifier.padding(top = 6.dp),
+                                                )
+                                            }
+                                        }
+                                        cmd.conflicts.take(4).forEach { c ->
+                                            Text(
+                                                "• ${c.path}: ${c.reason}",
+                                                fontSize = 10.sp,
+                                                color = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.padding(top = 2.dp),
+                                            )
+                                        }
+                                    }
+                                }
                                 val mut = line.mutation
                                 if (mut != null && line.receipt.status == "OK") {
                                     when (mut.phase) {
@@ -457,6 +534,52 @@ fun AgentChatPanel(
 }
 
 @Composable
+private fun TelemetrySummaryStrip(
+    summary: TelemetrySummary,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(KineticColors.surfaceContainerHighest.copy(alpha = 0.35f))
+            .border(1.dp, KineticColors.outlineVariant.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
+            .padding(10.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "TELEMETRY",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.8.sp,
+                color = KineticColors.outline,
+            )
+            Text(
+                summary.lastEventLabel,
+                fontSize = 9.sp,
+                color = KineticColors.onSurfaceVariant,
+            )
+        }
+        Text(
+            "${summary.turnCount} turns · ${summary.totalTokens} est tokens · ${summary.eventCount} events · ${formatUsd(summary.estimatedCostUsd)} est",
+            fontSize = 10.sp,
+            color = KineticColors.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        Text(
+            "First token avg ${summary.averageFirstTokenMs?.let { "${it}ms" } ?: "—"} · tool p95 ${summary.p95ToolMs?.let { "${it}ms" } ?: "—"} · failures ${summary.failureCount}",
+            fontSize = 10.sp,
+            color = KineticColors.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+    }
+}
+
+@Composable
 private fun ToolReceiptView(receipt: AgentViewModel.ToolReceipt) {
     Column(
         modifier = Modifier
@@ -494,6 +617,9 @@ private fun ToolReceiptView(receipt: AgentViewModel.ToolReceipt) {
         )
     }
 }
+
+private fun formatUsd(value: Double): String =
+    "$" + String.format(Locale.US, "%.4f", value)
 
 @Composable
 private fun AssistantBubble(text: String) {

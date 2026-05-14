@@ -51,6 +51,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.tabletaide.ide.data.AgentToolPolicyMode
 import com.tabletaide.ide.data.AgentToolRiskClass
 import com.tabletaide.ide.data.AgentTrustPolicyState
+import com.tabletaide.ide.data.AuditEntry
 import com.tabletaide.ide.data.LlmCredentialState
 import com.tabletaide.ide.data.LlmProvider
 import com.tabletaide.ide.ui.theme.KineticThemeMode
@@ -71,7 +72,7 @@ fun TabletIdeScreen(
     ideVm: IdeViewModel = hiltViewModel(),
     agentVm: AgentViewModel = hiltViewModel(),
 ) {
-    val filteredTree by ideVm.filteredTree.collectAsState()
+    val explorerTreeState by ideVm.explorerTreeUiState.collectAsState()
     val explorerTreeFilterQuery by ideVm.explorerTreeFilterQuery.collectAsState()
     val tabs by ideVm.tabs.collectAsState()
     val selectedTabIndex by ideVm.selectedTabIndex.collectAsState()
@@ -97,6 +98,9 @@ fun TabletIdeScreen(
     val agentError by agentVm.error.collectAsState()
     val provider by agentVm.provider.collectAsState()
     val credentials by agentVm.credentials.collectAsState()
+    val telemetrySummary by agentVm.telemetrySummary.collectAsState()
+    val auditEntries by agentVm.auditEntries.collectAsState()
+    val auditLoading by agentVm.auditLoading.collectAsState()
     val composerDraft by agentVm.composerDraft.collectAsState()
     val trustPolicyState by agentVm.trustPolicyState.collectAsState()
     val agentToolApprovalState by agentVm.agentToolApprovalState.collectAsState()
@@ -125,6 +129,7 @@ fun TabletIdeScreen(
     var commandPaletteQuery by remember { mutableStateOf("") }
     var apiKeysDialogVisible by remember { mutableStateOf(false) }
     var settingsDialogVisible by remember { mutableStateOf(false) }
+    var auditTimelineVisible by remember { mutableStateOf(false) }
     var editorAgentFraction by rememberSaveable { mutableFloatStateOf(0.65f) }
 
     DisposableEffect(lifecycleOwner) {
@@ -301,6 +306,13 @@ fun TabletIdeScreen(
                 onInvoke = { ideVm.setThemeMode(KineticThemeMode.HIGH_CONTRAST) },
             ),
             PaletteCommand(
+                title = "Audit timeline",
+                subtitle = "Browse persistent agent tool history",
+                keywords = listOf("audit", "history", "log", "agent", "timeline", "receipt"),
+                enabled = true,
+                onInvoke = { auditTimelineVisible = true },
+            ),
+            PaletteCommand(
                 title = "Clear agent chat",
                 subtitle = "Reset AI Architect conversation",
                 keywords = listOf("clear", "chat", "agent", "ai"),
@@ -360,6 +372,10 @@ fun TabletIdeScreen(
                 onInvoke = ideVm::clearRunnerOutput,
             ),
         )
+    }
+
+    LaunchedEffect(auditTimelineVisible) {
+        if (auditTimelineVisible) agentVm.loadAuditEntries()
     }
 
     LaunchedEffect(status) {
@@ -467,6 +483,7 @@ fun TabletIdeScreen(
                     commandPaletteVisible ||
                     apiKeysDialogVisible ||
                     settingsDialogVisible ||
+                    auditTimelineVisible ||
                     gitCommitDialogState.visible ||
                     agentToolApprovalState.visible
                 ) {
@@ -511,7 +528,10 @@ fun TabletIdeScreen(
             )
             if (railSection != RailSection.Search && railSection != RailSection.Extensions) {
                 FileTreePane(
-                    rows = filteredTree,
+                    rows = explorerTreeState.rows,
+                    treeLoading = explorerTreeState.loading,
+                    treeEmptyMessage = explorerTreeState.emptyMessage,
+                    filterActive = explorerTreeState.filterActive,
                     treeFilterQuery = explorerTreeFilterQuery,
                     onTreeFilterQueryChange = ideVm::setExplorerTreeFilterQuery,
                     selectedPath = activePath,
@@ -520,6 +540,7 @@ fun TabletIdeScreen(
                     hasWorkspaceRoot = ideVm.hasWorkspaceRoot(),
                     onOpenWorkspace = openFolder,
                     onSelectFile = ideVm::openOrSelectFile,
+                    onToggleDirectory = ideVm::toggleExplorerDirectory,
                     onOpenPinnedPath = ideVm::openExplorerPinnedPath,
                     onToggleFavoritePath = ideVm::toggleExplorerFavorite,
                     onCreateFile = ideVm::explorerCreateEmptyFile,
@@ -627,6 +648,7 @@ fun TabletIdeScreen(
                             error = agentError,
                             currentProvider = provider,
                             credentials = credentials,
+                            telemetrySummary = telemetrySummary,
                             composerDraft = composerDraft,
                             onDraftChange = agentVm::updateComposerDraft,
                             onSend = {
@@ -640,6 +662,8 @@ fun TabletIdeScreen(
                             onOpenApiKeys = { apiKeysDialogVisible = true },
                             onRevertToolMutation = agentVm::revertToolMutation,
                             onApplyToolMutation = agentVm::applyToolMutation,
+                            onRevertCommandMutation = agentVm::revertCommandMutation,
+                            onReapplyCommandMutation = agentVm::reapplyCommandMutation,
                             modifier = Modifier
                                 .weight(1f - editorW)
                                 .fillMaxHeight(),
@@ -668,6 +692,14 @@ fun TabletIdeScreen(
                 commandPaletteVisible = false
                 commandPaletteQuery = ""
             },
+        )
+        AuditTimelinePanel(
+            visible = auditTimelineVisible,
+            entries = auditEntries,
+            loading = auditLoading,
+            onDismiss = { auditTimelineVisible = false },
+            onClear = { agentVm.clearAuditEntries() },
+            onRefresh = { agentVm.loadAuditEntries() },
         )
     }
 }

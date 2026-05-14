@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.AlertDialog
@@ -35,14 +37,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.tabletaide.ide.data.TreeRow
 import com.tabletaide.ide.ui.theme.KineticColors
 
 @OptIn(ExperimentalFoundationApi::class)
 @Suppress("LongMethod")
 @Composable
 fun FileTreePane(
-    rows: List<TreeRow>,
+    rows: List<ExplorerVisibleRow>,
+    treeLoading: Boolean,
+    treeEmptyMessage: String?,
+    filterActive: Boolean,
     treeFilterQuery: String,
     onTreeFilterQueryChange: (String) -> Unit,
     selectedPath: String?,
@@ -50,20 +54,21 @@ fun FileTreePane(
     recentPaths: List<String>,
     hasWorkspaceRoot: Boolean,
     onOpenWorkspace: () -> Unit,
-    onSelectFile: (TreeRow) -> Unit,
+    onSelectFile: (ExplorerItem) -> Unit,
+    onToggleDirectory: (String) -> Unit,
     onOpenPinnedPath: (String) -> Unit,
     onToggleFavoritePath: (String) -> Unit,
     onCreateFile: (parentDirRelativeOrEmpty: String, leafName: String) -> Unit,
     onCreateFolderRelative: (relativeFolderPathTrimmed: String) -> Unit,
-    onRename: (TreeRow, newLeafName: String) -> Unit,
-    onDuplicate: (TreeRow) -> Unit,
-    onDelete: (TreeRow) -> Unit,
+    onRename: (ExplorerItem, newLeafName: String) -> Unit,
+    onDuplicate: (ExplorerItem) -> Unit,
+    onDelete: (ExplorerItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var menuRow by remember { mutableStateOf<TreeRow?>(null) }
-    var renameTarget by remember { mutableStateOf<TreeRow?>(null) }
+    var menuRow by remember { mutableStateOf<ExplorerItem?>(null) }
+    var renameTarget by remember { mutableStateOf<ExplorerItem?>(null) }
     var renameDraft by remember { mutableStateOf("") }
-    var deleteTarget by remember { mutableStateOf<TreeRow?>(null) }
+    var deleteTarget by remember { mutableStateOf<ExplorerItem?>(null) }
     var createFileParent by remember { mutableStateOf<String?>(null) }
 
     val favShown = remember(favoritePaths) { favoritePaths.take(12) }
@@ -301,10 +306,11 @@ fun FileTreePane(
             }
             items(
                 items = rows,
-                key = { it.path },
+                key = { it.item.path },
                 contentType = { "tree_row" },
-            ) { row ->
-                val menuOpen = menuRow?.path == row.path
+            ) { visibleRow ->
+                val item = visibleRow.item
+                val menuOpen = menuRow?.path == item.path
                 Box(Modifier.fillMaxWidth()) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -312,28 +318,49 @@ fun FileTreePane(
                             .fillMaxWidth()
                             .combinedClickable(
                                 onClick = {
-                                    if (!row.isDirectory) {
-                                        onSelectFile(row)
+                                    when {
+                                        item.isDirectory && visibleRow.canExpand && !filterActive -> {
+                                            onToggleDirectory(item.path)
+                                        }
+                                        !item.isDirectory -> onSelectFile(item)
                                     }
                                 },
-                                onLongClick = { menuRow = row },
+                                onLongClick = { menuRow = item },
                             )
                             .padding(
-                                start = (10 + row.depth * 10).dp,
+                                start = (10 + item.depth * 10).dp,
                                 top = 5.dp,
                                 bottom = 5.dp,
                                 end = 8.dp,
                             ),
                     ) {
+                        if (item.isDirectory && visibleRow.canExpand) {
+                            Icon(
+                                imageVector = if (visibleRow.expanded) {
+                                    Icons.Filled.KeyboardArrowDown
+                                } else {
+                                    Icons.AutoMirrored.Filled.KeyboardArrowRight
+                                },
+                                contentDescription = null,
+                                tint = KineticColors.onSurfaceVariant.copy(alpha = 0.85f),
+                                modifier = Modifier.size(18.dp),
+                            )
+                        } else {
+                            Box(Modifier.size(18.dp))
+                        }
                         Icon(
-                            imageVector = iconForTreeRow(row),
+                            imageVector = iconForExplorerItem(item),
                             contentDescription = null,
-                            tint = if (row.path == selectedPath) KineticColors.primary
+                            tint = if (item.path == selectedPath) KineticColors.primary
                             else KineticColors.onSurfaceVariant.copy(alpha = 0.75f),
                         )
                         Text(
-                            text = row.displayName,
-                            color = if (row.path == selectedPath) KineticColors.primary
+                            text = if (visibleRow.loadingChildren) {
+                                "${item.displayName} (loading...)"
+                            } else {
+                                item.displayName
+                            },
+                            color = if (item.path == selectedPath) KineticColors.primary
                             else MaterialTheme.colorScheme.onSurface,
                             fontSize = 13.sp,
                             modifier = Modifier.padding(start = 8.dp),
@@ -344,46 +371,46 @@ fun FileTreePane(
                         onDismissRequest = { menuRow = null },
                         modifier = Modifier.align(Alignment.TopEnd),
                     ) {
-                        if (row.isDirectory) {
+                        if (item.isDirectory) {
                             DropdownMenuItem(
                                 text = { Text("New file here") },
                                 onClick = {
                                     menuRow = null
-                                    createFileParent = row.path
+                                    createFileParent = item.path
                                 },
                             )
                             DropdownMenuItem(
                                 text = { Text("New subfolder…") },
                                 onClick = {
                                     menuRow = null
-                                    newFolderParent = row.path
+                                    newFolderParent = item.path
                                 },
                             )
                         }
-                        if (!row.isDirectory) {
-                            val isFav = favoritePaths.contains(row.path)
+                        if (!item.isDirectory) {
+                            val isFav = favoritePaths.contains(item.path)
                             DropdownMenuItem(
                                 text = {
                                     Text(if (isFav) "Remove favorite" else "Add favorite")
                                 },
                                 onClick = {
                                     menuRow = null
-                                    onToggleFavoritePath(row.path)
+                                    onToggleFavoritePath(item.path)
                                 },
                             )
                             DropdownMenuItem(
                                 text = { Text("Rename") },
                                 onClick = {
                                     menuRow = null
-                                    renameDraft = row.displayName
-                                    renameTarget = row
+                                    renameDraft = item.displayName
+                                    renameTarget = item
                                 },
                             )
                             DropdownMenuItem(
                                 text = { Text("Duplicate") },
                                 onClick = {
                                     menuRow = null
-                                    onDuplicate(row)
+                                    onDuplicate(item)
                                 },
                             )
                         }
@@ -391,8 +418,25 @@ fun FileTreePane(
                             text = { Text("Delete") },
                             onClick = {
                                 menuRow = null
-                                deleteTarget = row
+                                deleteTarget = item
                             },
+                        )
+                    }
+                }
+            }
+            if (rows.isEmpty()) {
+                val message = when {
+                    treeLoading -> "Loading tree…"
+                    treeEmptyMessage != null -> treeEmptyMessage
+                    else -> null
+                }
+                if (message != null) {
+                    item(key = "tree_empty_state", contentType = "tree_empty") {
+                        Text(
+                            text = message,
+                            color = KineticColors.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                         )
                     }
                 }
