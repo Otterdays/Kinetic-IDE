@@ -1,6 +1,8 @@
 package com.tabletaide.ide.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -46,6 +48,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.tabletaide.ide.data.AgentToolPolicyMode
+import com.tabletaide.ide.data.AgentToolRiskClass
+import com.tabletaide.ide.data.AgentTrustPolicyState
 import com.tabletaide.ide.data.LlmCredentialState
 import com.tabletaide.ide.data.LlmProvider
 import com.tabletaide.ide.ui.theme.KineticThemeMode
@@ -75,6 +80,8 @@ fun TabletIdeScreen(
     val undoRedoEpoch by ideVm.undoRedoEpoch.collectAsState()
     val gitRepoState by ideVm.gitRepoState.collectAsState()
     val gitCommitDialogState by ideVm.gitCommitDialogState.collectAsState()
+    val commandRunnerState by ideVm.commandRunnerState.collectAsState()
+    val runCommandDialogState by ideVm.runCommandDialogState.collectAsState()
 
     val canUndoNow = remember(undoRedoEpoch, tabs, selectedTabIndex) {
         ideVm.canUndo()
@@ -91,6 +98,8 @@ fun TabletIdeScreen(
     val provider by agentVm.provider.collectAsState()
     val credentials by agentVm.credentials.collectAsState()
     val composerDraft by agentVm.composerDraft.collectAsState()
+    val trustPolicyState by agentVm.trustPolicyState.collectAsState()
+    val agentToolApprovalState by agentVm.agentToolApprovalState.collectAsState()
 
     val explorerRecentsList by ideVm.explorerRecents.collectAsState()
     val explorerFavoritesList by ideVm.explorerFavorites.collectAsState()
@@ -115,7 +124,7 @@ fun TabletIdeScreen(
     var commandPaletteVisible by remember { mutableStateOf(false) }
     var commandPaletteQuery by remember { mutableStateOf("") }
     var apiKeysDialogVisible by remember { mutableStateOf(false) }
-    var themeDialogVisible by remember { mutableStateOf(false) }
+    var settingsDialogVisible by remember { mutableStateOf(false) }
     var editorAgentFraction by rememberSaveable { mutableFloatStateOf(0.65f) }
 
     DisposableEffect(lifecycleOwner) {
@@ -141,6 +150,12 @@ fun TabletIdeScreen(
         gitRepoState.clean,
         gitRepoState.canPush,
         gitRepoState.branchName,
+        commandRunnerState.available,
+        commandRunnerState.busy,
+        commandRunnerState.lastCommand,
+        trustPolicyState.fileMutationMode,
+        trustPolicyState.destructiveMode,
+        trustPolicyState.commandMode,
     ) {
         listOf(
             PaletteCommand(
@@ -251,6 +266,20 @@ fun TabletIdeScreen(
                 onInvoke = { apiKeysDialogVisible = true },
             ),
             PaletteCommand(
+                title = "Agent trust settings",
+                subtitle = buildString {
+                    append("Files ")
+                    append(trustPolicyState.fileMutationMode.displayName)
+                    append(" · Destructive ")
+                    append(trustPolicyState.destructiveMode.displayName)
+                    append(" · Commands ")
+                    append(trustPolicyState.commandMode.displayName)
+                },
+                keywords = listOf("trust", "approval", "policy", "agent", "safety", "settings"),
+                enabled = !busy,
+                onInvoke = { settingsDialogVisible = true },
+            ),
+            PaletteCommand(
                 title = "Theme: Dark",
                 subtitle = "Studio dark mode",
                 keywords = listOf("theme", "dark", "ui", "appearance"),
@@ -298,15 +327,37 @@ fun TabletIdeScreen(
             ),
             PaletteCommand(
                 title = "Execute / Run",
-                subtitle = "Stub — Termux later",
-                keywords = listOf("run", "execute", "debug", "play"),
-                onInvoke = {
-                    scope.launch {
-                        snackbar.showSnackbar(
-                            "Execute — connect Termux or a runner in a later phase",
-                        )
-                    }
+                subtitle = when {
+                    commandRunnerState.busy -> "Cancel the running command from the same shell"
+                    commandRunnerState.available -> "Run a shell command in the current workspace"
+                    else -> commandRunnerState.availabilityMessage ?: "Command execution unavailable"
                 },
+                keywords = listOf("run", "execute", "debug", "play"),
+                enabled = commandRunnerState.available && !commandRunnerState.busy,
+                onInvoke = ideVm::showRunCommandDialog,
+            ),
+            PaletteCommand(
+                title = "Rerun last command",
+                subtitle = commandRunnerState.lastCommand.ifBlank { "No previous command" },
+                keywords = listOf("rerun", "run", "repeat", "terminal"),
+                enabled = commandRunnerState.available &&
+                    !commandRunnerState.busy &&
+                    commandRunnerState.lastCommand.isNotBlank(),
+                onInvoke = ideVm::rerunLastCommand,
+            ),
+            PaletteCommand(
+                title = "Cancel running command",
+                subtitle = commandRunnerState.currentCommand.ifBlank { "No command is active" },
+                keywords = listOf("cancel", "stop", "kill", "terminal"),
+                enabled = commandRunnerState.busy,
+                onInvoke = ideVm::cancelRunningCommand,
+            ),
+            PaletteCommand(
+                title = "Clear terminal output",
+                subtitle = "Reset terminal, output, and debug panes",
+                keywords = listOf("clear", "terminal", "output", "debug"),
+                enabled = commandRunnerState.available,
+                onInvoke = ideVm::clearRunnerOutput,
             ),
         )
     }
@@ -369,14 +420,15 @@ fun TabletIdeScreen(
             },
         )
     }
-    if (themeDialogVisible) {
-        ThemeModeDialog(
-            current = themeMode,
-            onDismiss = { themeDialogVisible = false },
-            onSelect = { mode ->
+    if (settingsDialogVisible) {
+        SettingsDialog(
+            currentTheme = themeMode,
+            trustPolicyState = trustPolicyState,
+            onDismiss = { settingsDialogVisible = false },
+            onThemeSelect = { mode ->
                 ideVm.setThemeMode(mode)
-                themeDialogVisible = false
             },
+            onTrustModeSelect = agentVm::setTrustPolicyMode,
         )
     }
     GitCommitDialog(
@@ -391,6 +443,19 @@ fun TabletIdeScreen(
         onCommit = { ideVm.commitChanges(pushAfterCommit = false) },
         onCommitAndPush = { ideVm.commitChanges(pushAfterCommit = true) },
     )
+    RunCommandDialog(
+        dialogState = runCommandDialogState,
+        runnerState = commandRunnerState,
+        onDismiss = ideVm::hideRunCommandDialog,
+        onCommandChange = ideVm::updateRunCommandText,
+        onRun = ideVm::executeRunCommandFromDialog,
+    )
+    AgentToolApprovalDialog(
+        approvalState = agentToolApprovalState,
+        runnerState = commandRunnerState,
+        onApprove = agentVm::approvePendingTool,
+        onDeny = agentVm::denyPendingTool,
+    )
 
     Box(
         modifier = Modifier
@@ -401,8 +466,9 @@ fun TabletIdeScreen(
                 if (
                     commandPaletteVisible ||
                     apiKeysDialogVisible ||
-                    themeDialogVisible ||
-                    gitCommitDialogState.visible
+                    settingsDialogVisible ||
+                    gitCommitDialogState.visible ||
+                    agentToolApprovalState.visible
                 ) {
                     return@onPreviewKeyEvent false
                 }
@@ -441,7 +507,7 @@ fun TabletIdeScreen(
                 onExtensionsStub = {
                     scope.launch { snackbar.showSnackbar("Extensions — coming soon") }
                 },
-                onOpenSettings = { themeDialogVisible = true },
+                onOpenSettings = { settingsDialogVisible = true },
             )
             if (railSection != RailSection.Search && railSection != RailSection.Extensions) {
                 FileTreePane(
@@ -478,6 +544,7 @@ fun TabletIdeScreen(
                     canUndoNow = canUndoNow,
                     canRedoNow = canRedoNow,
                     gitState = gitRepoState,
+                    runnerBusy = commandRunnerState.busy,
                     onSelectTab = ideVm::selectTab,
                     onCloseTab = ::requestCloseTab,
                     onSave = ideVm::saveCurrentFile,
@@ -486,11 +553,19 @@ fun TabletIdeScreen(
                     onRedo = ideVm::redo,
                     onOpenCommitDialog = ideVm::showCommitDialog,
                     onExecute = {
-                        scope.launch {
-                            snackbar.showSnackbar("Execute — connect Termux or a runner in a later phase")
+                        if (commandRunnerState.busy) {
+                            ideVm.cancelRunningCommand()
+                        } else {
+                            ideVm.showRunCommandDialog()
                         }
                     },
                     agentBusy = busy,
+                )
+                CapabilityBanner(
+                    hasWorkspaceRoot = ideVm.hasWorkspaceRoot(),
+                    gitState = gitRepoState,
+                    runnerState = commandRunnerState,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                 )
                 BoxWithConstraints(
                     modifier = Modifier
@@ -526,6 +601,10 @@ fun TabletIdeScreen(
                                     .fillMaxWidth(),
                             )
                             TerminalPanel(
+                                runnerState = commandRunnerState,
+                                onRun = ideVm::showRunCommandDialog,
+                                onCancel = ideVm::cancelRunningCommand,
+                                onClear = ideVm::clearRunnerOutput,
                                 modifier = Modifier
                                     .height(192.dp)
                                     .fillMaxWidth(),
@@ -594,32 +673,61 @@ fun TabletIdeScreen(
 }
 
 @Composable
-private fun ThemeModeDialog(
-    current: KineticThemeMode,
+private fun SettingsDialog(
+    currentTheme: KineticThemeMode,
+    trustPolicyState: AgentTrustPolicyState,
     onDismiss: () -> Unit,
-    onSelect: (KineticThemeMode) -> Unit,
+    onThemeSelect: (KineticThemeMode) -> Unit,
+    onTrustModeSelect: (AgentToolRiskClass, AgentToolPolicyMode) -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Theme mode") },
+        title = { Text("Settings") },
         text = {
-            Column {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    "Theme",
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
                 KineticThemeMode.entries.forEach { mode ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(
-                            selected = current == mode,
-                            onClick = { onSelect(mode) },
-                        )
-                        TextButton(onClick = { onSelect(mode) }) {
-                            Text(mode.displayName)
-                        }
-                    }
+                    SettingsRadioRow(
+                        selected = currentTheme == mode,
+                        label = mode.displayName,
+                        onClick = { onThemeSelect(mode) },
+                    )
                 }
+
+                Text(
+                    "Agent trust",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                Text(
+                    "Read-only tools always run automatically. File and destructive tools can auto-run, ask, or be denied. Shell commands stay ask-or-deny only.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                TrustModeSection(
+                    title = AgentToolRiskClass.FILE_MUTATION.displayName,
+                    current = trustPolicyState.fileMutationMode,
+                    onSelect = { onTrustModeSelect(AgentToolRiskClass.FILE_MUTATION, it) },
+                )
+                TrustModeSection(
+                    title = AgentToolRiskClass.DESTRUCTIVE.displayName,
+                    current = trustPolicyState.destructiveMode,
+                    onSelect = { onTrustModeSelect(AgentToolRiskClass.DESTRUCTIVE, it) },
+                )
+                TrustModeSection(
+                    title = AgentToolRiskClass.COMMAND.displayName,
+                    current = trustPolicyState.commandMode,
+                    availableModes = listOf(
+                        AgentToolPolicyMode.ASK,
+                        AgentToolPolicyMode.DENY,
+                    ),
+                    onSelect = { onTrustModeSelect(AgentToolRiskClass.COMMAND, it) },
+                )
             }
         },
         dismissButton = {
@@ -629,6 +737,49 @@ private fun ThemeModeDialog(
         },
         confirmButton = {},
     )
+}
+
+@Composable
+private fun TrustModeSection(
+    title: String,
+    current: AgentToolPolicyMode,
+    availableModes: List<AgentToolPolicyMode> = AgentToolPolicyMode.entries,
+    onSelect: (AgentToolPolicyMode) -> Unit,
+) {
+    Text(
+        title,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.padding(top = 12.dp),
+    )
+    availableModes.forEach { mode ->
+        SettingsRadioRow(
+            selected = current == mode,
+            label = mode.displayName,
+            onClick = { onSelect(mode) },
+        )
+    }
+}
+
+@Composable
+private fun SettingsRadioRow(
+    selected: Boolean,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(
+            selected = selected,
+            onClick = onClick,
+        )
+        TextButton(onClick = onClick) {
+            Text(label)
+        }
+    }
 }
 
 @Composable

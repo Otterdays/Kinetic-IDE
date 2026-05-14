@@ -9,6 +9,11 @@ import com.tabletaide.ide.agent.LlmClient
 import com.tabletaide.ide.agent.PromptEnhancementService
 import com.tabletaide.ide.agent.StreamEvent
 import com.tabletaide.ide.agent.ToolRouter
+import com.tabletaide.ide.data.AgentToolApprovalState
+import com.tabletaide.ide.data.AgentToolPolicyMode
+import com.tabletaide.ide.data.AgentToolRiskClass
+import com.tabletaide.ide.data.AgentTrustPolicyState
+import com.tabletaide.ide.data.AgentTrustStore
 import com.tabletaide.ide.data.LlmCredentialState
 import com.tabletaide.ide.data.LlmProvider
 import com.tabletaide.ide.data.LlmProviderStore
@@ -25,6 +30,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import kotlinx.coroutines.CompletableDeferred
 import javax.inject.Inject
 
 @HiltViewModel
@@ -33,6 +39,7 @@ class AgentViewModel @Inject constructor(
     private val geminiClient: GeminiClientImpl,
     private val promptEnhancementService: PromptEnhancementService,
     private val toolRouter: ToolRouter,
+    private val trustStore: AgentTrustStore,
     private val providerStore: LlmProviderStore,
     private val workspace: WorkspaceRepository,
 ) : ViewModel() {
@@ -44,6 +51,7 @@ class AgentViewModel @Inject constructor(
 
     private val apiHistory = JSONArray()
     private val toolsJson = toolRouter.toolDefinitions()
+    private val toolSchemaError = toolRouter.validateToolDefinitions(toolsJson)
 
     private val _provider = MutableStateFlow(providerStore.getProvider())
     val provider: StateFlow<LlmProvider> = _provider.asStateFlow()
@@ -63,8 +71,17 @@ class AgentViewModel @Inject constructor(
     private val _enhancingPrompt = MutableStateFlow(false)
     val enhancingPrompt: StateFlow<Boolean> = _enhancingPrompt.asStateFlow()
 
+    private val _trustPolicyState = MutableStateFlow(trustStore.load())
+    val trustPolicyState: StateFlow<AgentTrustPolicyState> = _trustPolicyState.asStateFlow()
+
+    private val _agentToolApprovalState = MutableStateFlow(AgentToolApprovalState())
+    val agentToolApprovalState: StateFlow<AgentToolApprovalState> =
+        _agentToolApprovalState.asStateFlow()
+
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
+
+    private var pendingToolApproval: CompletableDeferred<Boolean>? = null
 
     fun setProvider(provider: LlmProvider) {
         providerStore.setProvider(provider)
@@ -78,6 +95,16 @@ class AgentViewModel @Inject constructor(
         _error.value = null
     }
 
+    fun setTrustPolicyMode(
+        riskClass: AgentToolRiskClass,
+        mode: AgentToolPolicyMode,
+    ) {
+        if (riskClass == AgentToolRiskClass.READ_ONLY) return
+        val updated = _trustPolicyState.value.withMode(riskClass, mode)
+        trustStore.save(updated)
+        _trustPolicyState.value = updated
+    }
+
     fun updateComposerDraft(text: String) {
         _composerDraft.value = text
     }
@@ -86,6 +113,10 @@ class AgentViewModel @Inject constructor(
         val trimmed = _composerDraft.value.trim()
         if (trimmed.isEmpty()) return
         if (_busy.value || _enhancingPrompt.value) return
+        toolSchemaError?.let {
+            _error.value = it
+            return
+        }
         if (!_credentials.value.hasKey(_provider.value)) {
             _error.value = "API key required. Tap the key icon in AI Architect to add one."
             return
@@ -127,6 +158,10 @@ class AgentViewModel @Inject constructor(
     fun sendUserMessage(text: String, systemPromptAppendix: String = "") {
         val trimmed = text.trim()
         if (trimmed.isEmpty() || _busy.value || _enhancingPrompt.value) return
+        toolSchemaError?.let {
+            _error.value = it
+            return
+        }
         if (!_credentials.value.hasKey(_provider.value)) {
             _error.value = "API key required. Tap the key icon in AI Architect to add one."
             return
@@ -158,6 +193,18 @@ class AgentViewModel @Inject constructor(
         }
         _lines.value = emptyList()
         _error.value = null
+    }
+
+    fun approvePendingTool() {
+        pendingToolApproval?.complete(true)
+        pendingToolApproval = null
+        _agentToolApprovalState.value = AgentToolApprovalState()
+    }
+
+    fun denyPendingTool() {
+        pendingToolApproval?.complete(false)
+        pendingToolApproval = null
+        _agentToolApprovalState.value = AgentToolApprovalState()
     }
 
     private suspend fun runAgentRounds(systemPromptAppendix: String = "") {
@@ -212,6 +259,7 @@ class AgentViewModel @Inject constructor(
             if (toolCalls.isEmpty()) return
 
             val toolResults = JSONArray()
+            val assistantExplanation = textBuf.toString().trim()
             for (call in toolCalls) {
                 val provider = _provider.value
                 val startedAtMillis = System.currentTimeMillis()
@@ -224,7 +272,29 @@ class AgentViewModel @Inject constructor(
                 } else {
                     ""
                 }
-                val resultText = toolRouter.dispatch(call.name, call.input)
+                val riskClass = riskClassForTool(call.name)
+                val policyMode = _trustPolicyState.value.modeFor(riskClass)
+                val approvalOutcome = when (policyMode) {
+                    AgentToolPolicyMode.AUTO -> ToolApprovalOutcome.AUTO
+                    AgentToolPolicyMode.DENY -> ToolApprovalOutcome.BLOCKED
+                    AgentToolPolicyMode.ASK -> {
+                        val approved = requestToolApproval(
+                            call = call,
+                            riskClass = riskClass,
+                            policyMode = policyMode,
+                            assistantExplanation = assistantExplanation,
+                        )
+                        if (approved) ToolApprovalOutcome.APPROVED else ToolApprovalOutcome.DENIED
+                    }
+                }
+                val resultText = when (approvalOutcome) {
+                    ToolApprovalOutcome.AUTO,
+                    ToolApprovalOutcome.APPROVED -> toolRouter.dispatch(call.name, call.input)
+                    ToolApprovalOutcome.DENIED ->
+                        "Error: ${call.name} denied by user"
+                    ToolApprovalOutcome.BLOCKED ->
+                        "Error: ${call.name} blocked by trust policy (${policyMode.displayName})"
+                }
                 val mutation = if (captureMutation &&
                     pathRaw.isNotBlank() &&
                     !resultText.startsWith("Error:")
@@ -249,6 +319,9 @@ class AgentViewModel @Inject constructor(
                         toolName = call.name,
                         target = toolTargetSummary(call.name, call.input),
                         status = if (resultText.startsWith("Error:")) "FAILED" else "OK",
+                        riskClass = riskClass.displayName,
+                        policyMode = policyMode.displayName,
+                        approvalOutcome = approvalOutcome.displayName,
                         startedAt = receiptTimeFormat.format(Date(startedAtMillis)),
                         durationMs = durationMs,
                     ),
@@ -257,6 +330,7 @@ class AgentViewModel @Inject constructor(
                     JSONObject()
                         .put("type", "tool_result")
                         .put("tool_use_id", call.id)
+                        .put("tool_name", call.name)
                         .put("content", resultText),
                 )
             }
@@ -415,11 +489,7 @@ class AgentViewModel @Inject constructor(
         mutation: ToolMutationAction?,
         receipt: ToolReceipt,
     ) {
-        val inputJson = try {
-            input.toString(2)
-        } catch (_: Exception) {
-            input.toString()
-        }
+        val inputJson = formatJson(input)
         val full = if (resultText.length > TOOL_RESULT_UI_MAX_CHARS) {
             resultText.take(TOOL_RESULT_UI_MAX_CHARS) + "\n… (truncated for chat UI)"
         } else {
@@ -446,11 +516,59 @@ class AgentViewModel @Inject constructor(
             "search_files" -> input.optString("pattern").takeIf { it.isNotBlank() }?.let {
                 "pattern: $it"
             } ?: "workspace"
+            "run_command" -> input.optString("command").takeIf { it.isNotBlank() } ?: "workspace"
             "rename_path" -> {
                 val newName = input.optString("new_name").takeIf { it.isNotBlank() }
                 if (path != null && newName != null) "$path -> $newName" else path ?: "workspace"
             }
             else -> path ?: "workspace"
+        }
+    }
+
+    private suspend fun requestToolApproval(
+        call: ToolCall,
+        riskClass: AgentToolRiskClass,
+        policyMode: AgentToolPolicyMode,
+        assistantExplanation: String,
+    ): Boolean {
+        val deferred = CompletableDeferred<Boolean>()
+        pendingToolApproval = deferred
+        _agentToolApprovalState.value = AgentToolApprovalState(
+            visible = true,
+            requestId = call.id,
+            toolName = call.name,
+            riskClass = riskClass,
+            target = toolTargetSummary(call.name, call.input),
+            workspacePath = workspace.rootTreeUriOrNull()?.toString().orEmpty(),
+            inputJson = formatJson(call.input),
+            assistantExplanation = assistantExplanation
+                .ifBlank { "The assistant did not include a rationale before requesting this action." }
+                .take(APPROVAL_EXPLANATION_MAX_CHARS),
+            policyMode = policyMode,
+        )
+        return try {
+            deferred.await()
+        } finally {
+            if (pendingToolApproval === deferred) {
+                pendingToolApproval = null
+            }
+            _agentToolApprovalState.value = AgentToolApprovalState()
+        }
+    }
+
+    private fun riskClassForTool(name: String): AgentToolRiskClass = when (name) {
+        "list_files", "read_file", "search_files" -> AgentToolRiskClass.READ_ONLY
+        "write_file", "edit_file", "create_directory" -> AgentToolRiskClass.FILE_MUTATION
+        "rename_path", "delete_path" -> AgentToolRiskClass.DESTRUCTIVE
+        "run_command" -> AgentToolRiskClass.COMMAND
+        else -> AgentToolRiskClass.DESTRUCTIVE
+    }
+
+    private fun formatJson(input: JSONObject): String {
+        return try {
+            input.toString(2)
+        } catch (_: Exception) {
+            input.toString()
         }
     }
 
@@ -473,6 +591,13 @@ class AgentViewModel @Inject constructor(
     }
 
     private data class ToolCall(val id: String, val name: String, val input: JSONObject)
+
+    private enum class ToolApprovalOutcome(val displayName: String) {
+        AUTO("Auto"),
+        APPROVED("Approved"),
+        DENIED("Denied"),
+        BLOCKED("Blocked"),
+    }
 
     enum class ToolMutationPhase {
         APPLIED_ON_DISK,
@@ -510,6 +635,9 @@ class AgentViewModel @Inject constructor(
         val toolName: String,
         val target: String,
         val status: String,
+        val riskClass: String,
+        val policyMode: String,
+        val approvalOutcome: String,
         val startedAt: String,
         val durationMs: Long,
     )
@@ -517,6 +645,7 @@ class AgentViewModel @Inject constructor(
     private companion object {
         private const val TOOL_RESULT_UI_MAX_CHARS = 100_000
         private const val TOOL_PREVIEW_CHARS = 600
+        private const val APPROVAL_EXPLANATION_MAX_CHARS = 800
         private val receiptTimeFormat = SimpleDateFormat("HH:mm:ss", Locale.US)
     }
 }

@@ -486,6 +486,12 @@ private fun ToolReceiptView(receipt: AgentViewModel.ToolReceipt) {
             color = KineticColors.onSurface,
             modifier = Modifier.padding(top = 4.dp),
         )
+        Text(
+            "Risk: ${receipt.riskClass} · Policy: ${receipt.policyMode} · Decision: ${receipt.approvalOutcome}",
+            fontSize = 10.sp,
+            color = KineticColors.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
     }
 }
 

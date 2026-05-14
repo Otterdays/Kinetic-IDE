@@ -10,6 +10,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **[ROADMAP Epic 1.3 / capability clarity]** Added inline IDE-shell capability banners so users can
+  see when editing + AI workspace context are available but git and/or command execution remain
+  unavailable for the current workspace location.
+
+- **[ROADMAP Epic 2.1 / Agent trust]** Added a persisted agent trust-policy layer with configurable
+  **Auto / Ask / Deny** modes for file changes and destructive operations, plus **Ask / Deny**
+  gating for shell commands, a generalized approval dialog, and richer tool receipts showing risk,
+  policy, and decision metadata.
+
+- **[ROADMAP Epic 2.1 / Agent trust]** Added a real agent `run_command` tool path on top of the
+  in-app runner, plus an explicit approval dialog before shell execution so AI-triggered commands
+  are reviewable, denyable, and return structured stdout/stderr/exit-code results into the chat.
+
+- **[ROADMAP Ship-readiness sprint]** Added a first real in-app command runner:
+  `CommandRunnerModels`, `WorkspaceExecutionResolver`, `InAppCommandRunner`, and
+  `RunCommandDialog`, giving Kinetic a bounded workspace-root shell execution path with output,
+  cancellation, rerun, and clear-output support.
+
 - **[ROADMAP Agent UX]** Added a one-shot `PromptEnhancementService` so the AI panel can rewrite the
   current composer draft into a clearer prompt without using the full chat/tool loop or sending the
   message immediately.
@@ -45,6 +63,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **[ROADMAP Startup Gateway MVP]** Added a validated clone-repository placeholder dialog with staged
   messaging and destination picking, intentionally deferring real git clone execution to a later phase.
+  *[AMENDED 2026-05-14]: Superseded later in this same Unreleased section by the shipped real JGit
+  clone/auth flow. Retained here as historical trace of the earlier gateway slice.*
 
 - **[ROADMAP Epic 1.3] Theme modes:** Added persisted app appearance modes
   (**Dark / Light / High Contrast**) via `IdeViewModel` + `KineticTheme` selector.
@@ -142,6 +162,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `ToolRouter` `search_files` match cap loop: `break@outer` replaces invalid `return@outer` (compile error).
 
 ### Changed
+
+- **Docs truth pass:** `README.md`, `DOCS/SUMMARY.md`, and `DOCS/ROADMAP.md` now describe the current
+  MVP accurately: real startup clone/auth flow, real git commit/push, trust controls, inline
+  capability banners, and the remaining shared-storage / All files access / non-PTY limitations.
+
+- AI tool reliability was hardened: `ToolRouter` now emits the correct `input_schema` for
+  `edit_file`, `AgentViewModel` validates tool definitions before sending tool-enabled requests, and
+  `GeminiClientImpl` now preserves tool names in `functionResponse` and sends `toolConfig`.
+
+- Execute surfaces are no longer placeholders: `TabletIdeScreen`, `KineticShell`, and
+  `TerminalPanel` now route through the in-app runner, and the command palette adds real run/rerun/
+  cancel/clear terminal actions. `Debug` was explicitly downgraded to a visible `Debug Soon` state
+  instead of a no-op button.
+
+- Autosave failures now surface visible status feedback in `IdeViewModel` instead of being silently
+  swallowed during background writes.
 
 - `AgentChatPanel` now supports an `Enhance prompt` composer action that rewrites the typed draft
   in place for review before send, using the selected provider and current workspace context.

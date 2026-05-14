@@ -2,7 +2,7 @@
 
 # SBOM — Kinetic
 
-**Last updated:** 2026-05-13
+**Last updated:** 2026-05-14
 
 ## Build toolchain
 
@@ -47,7 +47,12 @@
 
 ## Notes
 
+- 2026-05-14 capability-banner + docs-truth pass: no dependency or plugin version changes.
 - Source of truth: `settings.gradle.kts`, `app/build.gradle.kts`, `app/settings.gradle.kts`, `gradle/wrapper/gradle-wrapper.properties`.
+- 2026-05-14 trust policy layer: no dependency or plugin version changes. Adds a SharedPreferences-
+  backed policy store and broader approval/receipt UI on top of the existing agent/runtime stack.
+- 2026-05-13 agent `run_command` tool slice: no dependency or plugin version changes. Reuses the
+  existing in-app runner/runtime and adds approval-gated AI execution on top.
 - Root repo policy: `FAIL_ON_PROJECT_REPOS` with `google()` and `mavenCentral()`.
 - 2026-04-30 theme-mode UI pass: no dependency or plugin version changes.
 - 2026-05-13 startup gateway MVP: no dependency or plugin version changes.
@@ -55,3 +60,4 @@
 - 2026-05-13 git clone auth MVP: shared-folder clone path currently depends on Android `MANAGE_EXTERNAL_STORAGE`; saved git auth is excluded from backup/data-transfer via XML rules.
 - 2026-05-13 git commit / push MVP: no dependency or plugin version changes. Reuses existing JGit runtime plus saved host-scoped HTTPS auth and adds local git author-name/email persistence in app prefs.
 - 2026-05-13 prompt enhancer UX: no dependency or plugin version changes. Reuses the existing Anthropic/Gemini provider stack for one-shot draft rewriting in the AI composer.
+- 2026-05-13 ship-readiness sprint: no dependency or plugin version changes. Adds an in-app command runner using Android-accessible `/system/bin/sh` plus shared-storage workspace path resolution; still bounded by filesystem-backed workspace access.

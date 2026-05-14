@@ -2,6 +2,106 @@
 
 # SCRATCHPAD — Kinetic
 
+## Session checkpoint — 2026-05-14 (docs truth pass shipped)
+
+- **Done:** Updated `README.md` to reflect the current MVP instead of older Phase 1 / terminal-stub
+  wording: real startup clone/auth flow, git commit/push, trust controls, and bounded command-runner
+  constraints are now called out explicitly.
+- **Done:** Synced `DOCS/SUMMARY.md`, `DOCS/ROADMAP.md`, and `DOCS/CHANGELOG.md` to the real app state,
+  including the new capability-banner UX and the fact that startup clone is no longer a placeholder.
+- **Done:** Annotated the stale historical changelog/summary wording rather than deleting it, keeping
+  the append-only doc trail intact while making the current status clear.
+- **Done:** Updated `DOCS/SBOM.md` with a no-dependency-change note for this slice.
+- **Next:** Optional follow-up is a small UI copy pass in `StartupGatewayScreen.kt` so the gateway card
+  text matches the now-correct docs and shipped clone behavior.
+
+## Session checkpoint — 2026-05-14 (capability banners shipped)
+
+- **Done:** Added a dedicated `CapabilityBanner` surface in the IDE shell so workspace limitations are
+  visible inline instead of only surfacing as disabled actions or dialog errors.
+- **Done:** Wired banner messaging from existing `GitRepoUiState.message` and
+  `CommandRunnerUiState.availabilityMessage`, keeping the capability copy truthful to the current
+  workspace/path constraints without introducing duplicate resolver logic.
+- **Done:** Banner copy explicitly tells the user that editing + AI workspace context still work while
+  git and/or command execution may remain unavailable in unsupported locations.
+- **Verify:** `.\gradlew.bat :app:compileDebugKotlin` from repo root **BUILD SUCCESSFUL**.
+- **Next:** Do the broader docs truth pass separately (startup gateway wording, README status, roadmap
+  sync) once the current UI slice is accepted.
+
+## Session checkpoint — 2026-05-14 (trust policy layer shipped)
+
+- **Done:** Added persisted agent trust policy state via `AgentTrustStore` with configurable
+  **Auto / Ask / Deny** modes for file changes, destructive ops, and shell commands.
+- **Done:** Generalized the approval gate from command-only handling to broader risky-tool handling in
+  `AgentViewModel`, so `write_file`, `edit_file`, `create_directory`, `rename_path`, `delete_path`,
+  and `run_command` now flow through centralized policy decisions.
+- **Done:** Replaced the command-only approval dialog with a generic tool approval dialog that shows
+  risk class, target, policy mode, assistant rationale, and request JSON before execution.
+- **Done:** Expanded tool receipts in the chat UI to show risk class, policy mode, and approval
+  decision alongside the existing provider/time/status metadata.
+- **Done:** Added a lightweight settings surface so trust modes can be changed in-app without editing
+  code, while keeping theme controls in the same settings entry point.
+- **Verify:** `.\gradlew.bat :app:compileDebugKotlin` from repo root **BUILD SUCCESSFUL**.
+- **Known limitation:** Trust policy is still app-wide, not per-workspace or per-tool; audit history
+  is still session-local chat UI only; dry-run and explain-before-change remain future work.
+- **Next:** Highest-value follow-up is either destructive-op dry-run/preview or a durable audit
+  timeline so approvals and tool actions survive beyond the live conversation session.
+
+## Session checkpoint — 2026-05-14 (trust policy layer in progress)
+
+- **In progress:** Broadening the agent trust layer beyond command-only approval by adding a small
+  persisted policy store, generic risky-tool approval state, and richer receipt metadata.
+- **Direction:** Keep the existing `AgentViewModel` orchestration choke point and reuse the current
+  modal approval slot in `TabletIdeScreen` so the safety logic stays centralized and low-churn.
+- **Next:** Land trust-policy models/store first, then generalize approval across file-mutation and
+  destructive tools, then add a minimal trust settings dialog and verify compile/docs.
+
+## Session checkpoint — 2026-05-13 (agent run command shipped)
+
+- **Done:** Added a real `run_command` agent tool to `ToolRouter`, backed by the existing
+  `InAppCommandRunner` instead of a disconnected placeholder path.
+- **Done:** Added explicit approval UX for agent command execution with
+  `AgentCommandApprovalState` and `AgentCommandApprovalDialog`, so shell commands pause for user
+  review before they run.
+- **Done:** Extended the runner with tool-oriented execution results (`stdout`, `stderr`, exit code,
+  cancellation) so agent tool receipts correctly report success vs failure and return a useful
+  command transcript back into the chat loop.
+- **Verify:** `.\gradlew.bat :app:compileDebugKotlin` from repo root **BUILD SUCCESSFUL**.
+- **Known limitation:** Agent command execution still inherits the runner MVP limits: one foreground
+  workspace-root command at a time, `/system/bin/sh` only, no PTY, no timeout presets, and no
+  broader per-tool approval policy matrix yet.
+- **Next:** Highest-value follow-up is either richer tool policy controls (auto/ask/deny classes,
+  dry-run rules) or the next trust surface from roadmap Phase 2/3 such as diagnostics/LSP plumbing.
+
+## Session checkpoint — 2026-05-13 (agent run command in progress)
+
+- **In progress:** Beginning the next roadmap slice from Phase 2 tool router: real `run_command`
+  support for the agent, backed by the new in-app runner instead of leaving execution disconnected
+  from AI tool calls.
+- **Direction:** Add the tool schema plus a user approval step before execution so shell commands are
+  reviewable and cancelable rather than silently executed by the model.
+- **Next:** Extend the runner for agent-awaitable command results, wire approval state into
+  `AgentViewModel` / `TabletIdeScreen`, and verify the tool round-trip with a full Kotlin compile.
+
+## Session checkpoint — 2026-05-13 (ship-readiness sprint shipped)
+
+- **Done:** Fixed the highest-confidence AI tool-loop breakpoints: `ToolRouter.toolDefinitions()`
+  now emits the correct `input_schema` for `edit_file`, `AgentViewModel` validates tool schema
+  before sending tool-enabled requests, and `GeminiClientImpl` now preserves tool names in
+  `functionResponse` plus actually sends `toolConfig`.
+- **Done:** Added a first real in-app runner stack:
+  `CommandRunnerModels`, `WorkspaceExecutionResolver`, `InAppCommandRunner`, and `RunCommandDialog`.
+  The shell now supports one foreground workspace-root command at a time with output capture,
+  cancellation, rerun, clear-output, and debug/event lines.
+- **Done:** Replaced execute stubs across `TabletIdeScreen`, `KineticShell`, and `TerminalPanel`
+  with real runner-backed flows. Command palette now exposes run/rerun/cancel/clear actions.
+- **Done:** Autosave failures are no longer swallowed silently; `IdeViewModel.autosaveTabIfDirty()`
+  now surfaces visible status feedback when background writes fail.
+- **Verify:** `.\gradlew.bat :app:compileDebugKotlin` from repo root **BUILD SUCCESSFUL**.
+- **Known limitation:** The first in-app runner still depends on a workspace that resolves to a real
+  shared-storage filesystem path with **All files access**. It is not a PTY shell, only supports one
+  foreground command at a time, and does not provide real debugger integration yet.
+
 ## Session checkpoint — 2026-05-13 (prompt enhancer shipped)
 
 - **Done:** Added a Trae-style `Enhance prompt` flow to `AgentChatPanel` so the current draft can be

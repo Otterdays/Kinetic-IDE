@@ -41,6 +41,7 @@ text box."
   - [ ] Stylus-friendly selection tuning
   - [x] Theme modes **[partial — Dark / Light / High Contrast via settings dialog + command palette; additional per-pane/accessibility polish still `[ ]`]**
   - [x] Command palette **[partial — filtered palette + primary actions; not yet “all primary actions”]**
+  - [x] Capability/status banners **[MVP — inline shell banner now explains when editing/chat still work but git and/or command execution are unavailable in the current workspace]**
 
 ### Phase 2 — Agent V1 + developer trust *(partial MVP; see granular § below)*
 
@@ -76,11 +77,11 @@ text box."
   - [x] **`edit_file`** (unique substring replace — not full **`apply_patch` / unified diff**; treat as **[partial]** vs roadmap “apply_patch”)
   - [x] **`search_files`** (regex across files + scan/match caps)
   - [x] **`create_directory`** / **`delete_path`** / **`rename_path`** (same-parent leaf rename via SAF `DocumentFile`)
-  - [ ] **`run_command`** / Termux-host bridge **[ ]**
+  - [x] **`run_command`** **[partial — backed by the in-app `/system/bin/sh` workspace runner with trust-policy ask / deny controls plus approval UI; still no PTY, timeout policy, Termux bridge, background-job model, or command allowlist]**
   - [ ] Path sandbox **`[partial]`** — workspace is SAF subtree only; no formal allow-list / escape tests **[ ]**
   - [ ] Dry-run for destructive ops **[ ]**
-  - [x] Operation receipts + visible audit **[partial — expanded tool cards show provider, time, duration, target, status; persistent audit log still `[ ]`]**
-  - [ ] Approval gates (**auto / ask / deny**) per tool class **[ ]**
+  - [x] Operation receipts + visible audit **[partial — expanded tool cards show provider, time, duration, target, status, risk, policy, and approval decision; persistent audit log still `[ ]`]**
+  - [x] Approval gates (**auto / ask / deny**) per tool class **[partial — persisted policy modes now gate file changes and destructive ops with `auto / ask / deny`, while shell commands intentionally stay `ask / deny`; fine-grained per-tool/per-workspace policy remains `[ ]`]**
 - **Epic 2.2 — Agent UX** — see **Phase 2 · Agent UX & context** for row-level status (partial vs backlog).
 - **Epic 2.3 — Prompt & context builder** — partial: `SYSTEM_PROMPT` + `IdeViewModel.buildAgentWorkspaceContext()` on each send (tabs/selection); templates/rules still `[ ]`.
 
@@ -116,6 +117,11 @@ text box."
 
 - *[AMENDED 2026-04-30]: Epic 1.2 **ExplorerPinsStore** + explorer STARRED/RECENT; Epic 1.3 divider snap + Ctrl+S / Ctrl+Shift+S / Ctrl+W.*
 - *[AMENDED 2026-04-30]: Epic 2.1 visible tool receipts: expanded tool cards show provider, time, duration, target, and OK/FAILED status.*
+- *[AMENDED 2026-05-13]: Ship-readiness sprint landed outside the original checkbox rows: AI tool schema/provider reliability was hardened, `Execute` is now backed by a first in-app runner (`/system/bin/sh`, one foreground command, workspace-root execution), and autosave failures now surface status feedback. Full PTY shell, debugger integration, and agent `run_command` tool support remain pending.*
+- *[AMENDED 2026-05-13]: Epic 1.1 conflict handling is still **partial**; silent autosave failures are fixed, but interactive conflict prompts/resolution UX remain TODO.*
+- *[AMENDED 2026-05-13]: Agent `run_command` now exists as a real tool path using the runner MVP plus an explicit approval dialog before execution. It remains intentionally bounded to one foreground workspace-root command at a time, with no PTY/Termux bridge or generalized tool policy matrix yet.*
+- *[AMENDED 2026-05-14]: Agent trust policy broadened: file changes and destructive ops now use persisted **auto / ask / deny** settings, while shell commands intentionally stay **ask / deny** only; approval receipts also surface risk class, policy mode, and decision outcome. This is still a lightweight trust layer, not yet a persistent audit log, command allowlist, or full rules panel.*
+- *[AMENDED 2026-05-14]: Capability banners now surface workspace/git/runner availability inline in the shell, making the shared-storage + All files access constraints visible before the user hits a disabled action or error dialog.*
 
 ## Release themes
 

@@ -92,6 +92,9 @@ class GeminiClientImpl @Inject constructor(
                     }
                 ))
             }
+            if (toolConfig != null) {
+                put("toolConfig", toolConfig)
+            }
             put("generationConfig", JSONObject().apply {
                 put("maxOutputTokens", maxTokens)
             })
@@ -153,11 +156,14 @@ class GeminiClientImpl @Inject constructor(
                             parts.put(JSONObject().put("text", part.optString("text", "")))
                         }
                         "tool_result" -> {
+                            val toolUseId = part.optString("tool_use_id", "unknown")
+                            val toolName = part.optString("tool_name").ifBlank { toolUseId }
                             parts.put(JSONObject().apply {
                                 put("functionResponse", JSONObject().apply {
-                                    put("name", part.optString("tool_use_id", "unknown"))
+                                    put("name", toolName)
                                     put("response", JSONObject().apply {
                                         put("result", part.optString("content", ""))
+                                        put("toolUseId", toolUseId)
                                     })
                                 })
                             })

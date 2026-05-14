@@ -5,7 +5,7 @@
 [![Platform](https://img.shields.io/badge/platform-Android-3DDC84?logo=android&logoColor=white)](https://developer.android.com/)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.3-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/)
 [![Gradle](https://img.shields.io/badge/Gradle-9.4.1-02303A?logo=gradle&logoColor=white)](https://gradle.org/)
-[![AGP](https://img.shields.io/badge/AGP-9.1-4285F4?logo=androidstudio&logoColor=white)](https://developer.android.com/build)
+[![AGP](https://img.shields.io/badge/AGP-9.2-4285F4?logo=androidstudio&logoColor=white)](https://developer.android.com/build)
 [![minSdk](https://img.shields.io/badge/minSdk-26-2E7D32)](app/build.gradle.kts)
 ![License](https://img.shields.io/badge/license-TBD-lightgrey)
 
@@ -25,17 +25,31 @@ Design reference (Kinetic Syntax — `stitch_sample_1`):
 
 ---
 
-## Features (Phase 1)
+## Features (Current MVP)
 
 | Area | What’s in the app |
 |------|-------------------|
-| **Workspace** | SAF-backed tree, open folders, read/write via tool router |
-| **Editor** | Multi-tab surface, Kotlin keyword highlight, line gutter + breadcrumbs |
-| **Agent** | Anthropic SSE client, chat panel, `read_file` / `write_file` tools |
-| **Shell** | Nav rail, AI sidebar, terminal strip (Termux-oriented stub) |
+| **Workspace** | Startup gateway, recent workspaces, starter projects, SAF-backed open folder flow, inline capability banners |
+| **Editor** | Multi-tab surface, undo/redo, autosave, dirty guards, large-file fallback, line gutter + breadcrumbs |
+| **Agent** | Claude + Gemini chat, in-app API key settings, prompt enhancement, tool cards, receipts, apply/revert for file edits |
+| **Tools** | `list_files`, `read_file`, `write_file`, `edit_file`, `search_files`, `create_directory`, `rename_path`, `delete_path`, `run_command` |
+| **Git** | HTTPS token clone, saved auth, repo status, AI commit messages, commit, tracked-branch push |
+| **Shell** | In-app workspace runner with execute, rerun, cancel, clear, and terminal/output/debug panes |
+| **Trust** | App-wide Auto / Ask / Deny policies for file changes, destructive ops, and shell commands |
 | **DI** | Hilt + **KSP** (AGP 9 built-in Kotlin) |
 
-Roadmap: LSP, richer diagnostics, git, Rust/NDK core — see [`claude_ide_recommendation.html`](claude_ide_recommendation.html) and [`DOCS/ARCHITECTURE.md`](DOCS/ARCHITECTURE.md).
+Roadmap: LSP, richer diagnostics/navigation, PTY/debugger-grade terminal work, deeper git flows,
+and Rust/NDK core — see [`claude_ide_recommendation.html`](claude_ide_recommendation.html) and
+[`DOCS/ARCHITECTURE.md`](DOCS/ARCHITECTURE.md).
+
+## Current limits
+
+- Clone, git, and command execution currently require shared-storage workspaces that resolve to real
+  filesystem paths and usually need Android **All files access**.
+- The runner uses Android-accessible `/system/bin/sh`; it is intentionally a bounded foreground
+  command runner, not yet a PTY terminal or debugger host.
+- LSP, diagnostics, go-to-definition, hover, and richer project-wide navigation are still roadmap
+  work.
 
 ---
 
@@ -86,7 +100,7 @@ After changing JDK settings: **Java: Clean Java Language Server Workspace** (or 
 
 - **UI:** Jetpack Compose, Material 3, Compose BOM
 - **Async:** Kotlin coroutines, OkHttp (SSE)
-- **Build:** Gradle **9.4.1**, AGP **9.1**, built-in Kotlin, Compose compiler plugin **2.3.10**, **KSP 2.3.6**, Hilt **2.59.2**
+- **Build:** Gradle **9.4.1**, AGP **9.2**, built-in Kotlin, Compose compiler plugin **2.3.10**, **KSP 2.3.6**, Hilt **2.59.2**
 
 Full table: [`DOCS/SBOM.md`](DOCS/SBOM.md)
 

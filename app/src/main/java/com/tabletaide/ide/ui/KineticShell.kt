@@ -165,6 +165,7 @@ fun KineticTopBar(
     canUndoNow: Boolean,
     canRedoNow: Boolean,
     gitState: GitRepoUiState,
+    runnerBusy: Boolean,
     onSelectTab: (Int) -> Unit,
     onCloseTab: (Int) -> Unit,
     onSave: () -> Unit,
@@ -303,13 +304,12 @@ fun KineticTopBar(
                 Icon(Icons.Default.DoneAll, "Save all", tint = KineticColors.primary)
             }
             Text(
-                text = "Debug",
+                text = "Debug Soon",
                 fontSize = 12.sp,
-                color = KineticColors.onSurface,
+                color = KineticColors.onSurfaceVariant.copy(alpha = 0.55f),
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                    .clickable { }
                     .padding(horizontal = 14.dp, vertical = 8.dp),
             )
             Row(
@@ -331,7 +331,7 @@ fun KineticTopBar(
                     modifier = Modifier.size(18.dp),
                 )
                 Text(
-                    text = "Execute",
+                    text = if (runnerBusy) "Cancel" else "Execute",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = KineticColors.onPrimaryFixed,

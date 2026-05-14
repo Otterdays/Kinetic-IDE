@@ -1,6 +1,7 @@
 package com.tabletaide.ide.agent
 
 import com.tabletaide.ide.data.WorkspaceRepository
+import com.tabletaide.ide.data.InAppCommandRunner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -11,6 +12,7 @@ import javax.inject.Singleton
 @Singleton
 class ToolRouter @Inject constructor(
     private val workspace: WorkspaceRepository,
+    private val commandRunner: InAppCommandRunner,
 ) {
 
     fun toolDefinitions(): JSONArray {
@@ -47,7 +49,7 @@ class ToolRouter @Inject constructor(
         }
         val writeFile = JSONObject().apply {
             put("name", "write_file")
-            put("description", "Write UTF-8 text to a file under the workspace root. Overwrites existing. Creates parent folders if needed.")
+            put("description", "Write UTF-8 text to a file under the workspace root. Overwrites existing. Creates parent folders if needed. Depending on trust policy, user approval may be required.")
             put("input_schema", JSONObject().apply {
                 put("type", "object")
                 put(
@@ -61,8 +63,8 @@ class ToolRouter @Inject constructor(
         }
         val editFile = JSONObject().apply {
             put("name", "edit_file")
-            put("description", "Replace a unique substring inside an existing file. Fails if old_string is missing or appears more than once. Prefer this over write_file when changing only part of a file.")
-            put("input_sch4ema", JSONObject().apply {
+            put("description", "Replace a unique substring inside an existing file. Fails if old_string is missing or appears more than once. Prefer this over write_file when changing only part of a file. Depending on trust policy, user approval may be required.")
+            put("input_schema", JSONObject().apply {
                 put("type", "object")
                 put(
                     "properties",
@@ -91,7 +93,7 @@ class ToolRouter @Inject constructor(
         }
         val createDirectory = JSONObject().apply {
             put("name", "create_directory")
-            put("description", "Create a folder (and any missing parents) under the workspace root.")
+            put("description", "Create a folder (and any missing parents) under the workspace root. Depending on trust policy, user approval may be required.")
             put("input_schema", JSONObject().apply {
                 put("type", "object")
                 put(
@@ -103,7 +105,7 @@ class ToolRouter @Inject constructor(
         }
         val deletePath = JSONObject().apply {
             put("name", "delete_path")
-            put("description", "Delete a file or folder (recursive) under the workspace root. Irreversible.")
+            put("description", "Delete a file or folder (recursive) under the workspace root. Irreversible. Depending on trust policy, user approval may be required.")
             put("input_schema", JSONObject().apply {
                 put("type", "object")
                 put(
@@ -115,7 +117,7 @@ class ToolRouter @Inject constructor(
         }
         val renamePath = JSONObject().apply {
             put("name", "rename_path")
-            put("description", "Rename leaf of a file or folder in place (does not move across folders).")
+            put("description", "Rename leaf of a file or folder in place (does not move across folders). Depending on trust policy, user approval may be required.")
             put("input_schema", JSONObject().apply {
                 put("type", "object")
                 put(
@@ -127,6 +129,24 @@ class ToolRouter @Inject constructor(
                 put("required", JSONArray().put("path").put("new_name"))
             })
         }
+        val runCommand = JSONObject().apply {
+            put("name", "run_command")
+            put("description", "Run a shell command inside the opened workspace root. Depending on trust policy, this may require user approval. Returns stdout, stderr, and exit code.")
+            put("input_schema", JSONObject().apply {
+                put("type", "object")
+                put(
+                    "properties",
+                    JSONObject()
+                        .put(
+                            "command",
+                            JSONObject()
+                                .put("type", "string")
+                                .put("description", "Shell command to run from the workspace root."),
+                        ),
+                )
+                put("required", JSONArray().put("command"))
+            })
+        }
         return JSONArray()
             .put(listFiles)
             .put(readFile)
@@ -136,6 +156,22 @@ class ToolRouter @Inject constructor(
             .put(createDirectory)
             .put(deletePath)
             .put(renamePath)
+            .put(runCommand)
+    }
+
+    fun validateToolDefinitions(definitions: JSONArray = toolDefinitions()): String? {
+        for (index in 0 until definitions.length()) {
+            val tool = definitions.optJSONObject(index)
+                ?: return "Agent tool schema is invalid at index $index."
+            val name = tool.optString("name").trim()
+            if (name.isEmpty()) {
+                return "Agent tool schema is missing a tool name at index $index."
+            }
+            if (tool.optJSONObject("input_schema") == null) {
+                return "Agent tool schema is missing input_schema for $name."
+            }
+        }
+        return null
     }
 
     suspend fun dispatch(name: String, input: JSONObject): String = withContext(Dispatchers.IO) {
@@ -276,6 +312,14 @@ class ToolRouter @Inject constructor(
                 }
                 workspace.renameLeaf(path, newName).fold(
                     onSuccess = { "Renamed to: $it" },
+                    onFailure = { "Error: ${it.message}" },
+                )
+            }
+            "run_command" -> {
+                val command = input.optString("command")
+                if (command.isBlank()) return@withContext "Error: missing command"
+                commandRunner.runForTool(command).fold(
+                    onSuccess = { it },
                     onFailure = { "Error: ${it.message}" },
                 )
             }

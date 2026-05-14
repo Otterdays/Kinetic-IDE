@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.tabletaide.ide.IdeConstants
 import com.tabletaide.ide.agent.GitCommitMessageService
 import com.tabletaide.ide.data.CloneTargetResolver
+import com.tabletaide.ide.data.CommandRunnerUiState
 import com.tabletaide.ide.data.EditorSessionStore
 import com.tabletaide.ide.data.ExplorerPinsStore
 import com.tabletaide.ide.data.GitCommitDialogState
@@ -29,11 +30,13 @@ import com.tabletaide.ide.data.GitRemoteSpec
 import com.tabletaide.ide.data.GitSavedAuthState
 import com.tabletaide.ide.data.GitStatusService
 import com.tabletaide.ide.data.GitStatusSnapshot
+import com.tabletaide.ide.data.InAppCommandRunner
 import com.tabletaide.ide.data.SupportedCloneTarget
 import com.tabletaide.ide.data.PersistedEditorSnapshot
 import com.tabletaide.ide.data.PersistedTab
 import com.tabletaide.ide.data.RecentWorkspaceEntry
 import com.tabletaide.ide.data.RecentWorkspacesStore
+import com.tabletaide.ide.data.RunCommandDialogState
 import com.tabletaide.ide.data.StarterProjectTemplate
 import com.tabletaide.ide.data.TreeRow
 import com.tabletaide.ide.data.WorkspaceMutationBus
@@ -91,6 +94,7 @@ class IdeViewModel @Inject constructor(
     private val gitPushService: GitPushService,
     private val gitIdentityStore: GitIdentityStore,
     private val gitCommitMessageService: GitCommitMessageService,
+    private val commandRunner: InAppCommandRunner,
     @param:ApplicationContext private val appContext: Context,
 ) : ViewModel() {
     private val uiPrefs by lazy {
@@ -115,6 +119,11 @@ class IdeViewModel @Inject constructor(
 
     private val _gitCommitDialogState = MutableStateFlow(GitCommitDialogState())
     val gitCommitDialogState: StateFlow<GitCommitDialogState> = _gitCommitDialogState.asStateFlow()
+
+    private val _runCommandDialogState = MutableStateFlow(RunCommandDialogState())
+    val runCommandDialogState: StateFlow<RunCommandDialogState> = _runCommandDialogState.asStateFlow()
+
+    val commandRunnerState: StateFlow<CommandRunnerUiState> = commandRunner.uiState
 
     private val _appLaunchSurface = MutableStateFlow(AppLaunchSurface.BOOTING)
     val appLaunchSurface: StateFlow<AppLaunchSurface> = _appLaunchSurface.asStateFlow()
@@ -163,6 +172,9 @@ class IdeViewModel @Inject constructor(
                 refreshTree()
             }
             .launchIn(viewModelScope)
+        commandRunner.events
+            .onEach { _status.value = it }
+            .launchIn(viewModelScope)
         viewModelScope.launch {
             while (isActive) {
                 delay(AutosaveIntervalMs)
@@ -183,6 +195,7 @@ class IdeViewModel @Inject constructor(
             AppLaunchSurface.STARTUP_GATEWAY
         }
         explorerPins.bindWorkspace(workspace.rootTreeUriOrNull())
+        commandRunner.bindWorkspace(workspace.rootTreeUriOrNull())
     }
 
     fun hasWorkspaceRoot(): Boolean = workspace.hasRoot()
@@ -309,6 +322,7 @@ class IdeViewModel @Inject constructor(
         redoByPath.clear()
         workspace.setRootFromUri(treeUri)
         explorerPins.bindWorkspace(treeUri)
+        commandRunner.bindWorkspace(treeUri)
         recentWorkspacesStore.recordWorkspace(treeUri, workspace.displayNameForTreeUri(treeUri))
         refreshTree()
         _tabs.value = emptyList()
@@ -421,6 +435,54 @@ class IdeViewModel @Inject constructor(
 
     fun hideCommitDialog() {
         _gitCommitDialogState.value = GitCommitDialogState()
+    }
+
+    fun showRunCommandDialog(prefill: String = commandRunnerState.value.lastCommand) {
+        val runnerState = commandRunnerState.value
+        if (!runnerState.available) {
+            _status.value = runnerState.availabilityMessage ?: "Command execution is unavailable."
+            return
+        }
+        _runCommandDialogState.value = RunCommandDialogState(
+            visible = true,
+            command = prefill,
+        )
+    }
+
+    fun hideRunCommandDialog() {
+        _runCommandDialogState.value = RunCommandDialogState()
+    }
+
+    fun updateRunCommandText(command: String) {
+        _runCommandDialogState.update { it.copy(command = command, errorMessage = null) }
+    }
+
+    fun executeRunCommandFromDialog() {
+        val command = _runCommandDialogState.value.command.trim()
+        commandRunner.run(command).fold(
+            onSuccess = {
+                _runCommandDialogState.value = RunCommandDialogState()
+            },
+            onFailure = {
+                _runCommandDialogState.update { state ->
+                    state.copy(errorMessage = it.message ?: "Could not start the command.")
+                }
+            },
+        )
+    }
+
+    fun rerunLastCommand() {
+        commandRunner.rerunLastCommand().onFailure {
+            _status.value = it.message ?: "No previous command is available to rerun."
+        }
+    }
+
+    fun cancelRunningCommand() {
+        commandRunner.cancel()
+    }
+
+    fun clearRunnerOutput() {
+        commandRunner.clearOutput()
     }
 
     fun updateCommitDraftMessage(message: String) {
@@ -1184,7 +1246,7 @@ class IdeViewModel @Inject constructor(
                 bumpUndoRedo()
             },
             onFailure = {
-                // NOTE: surface conflict/external change later (ROADMAP conflict prompts).
+                _status.value = "Auto-save failed for ${tab.fileName}: ${it.message ?: "unknown error"}"
             },
         )
     }
