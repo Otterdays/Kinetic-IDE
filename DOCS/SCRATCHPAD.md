@@ -2,6 +2,47 @@
 
 # SCRATCHPAD — Kinetic
 
+## MVP happy-path demo (documented — run on device)
+
+1. `gradlew.bat :app:assembleDebug` → install APK on tablet/emulator.
+2. Startup → **Grant All files access** → **Clone repository** → `Downloads/KineticTest` → HTTPS URL + GitHub PAT (`repo` scope) → save token.
+3. AI panel → **API keys** → add Gemini or Claude key → tap model label → pick model.
+4. Prompt: *Read README.md and add `<!-- kinetic mvp test -->` as the first line.* Approve write if Ask policy is on.
+5. `Ctrl+P` → **Commit and push** → generate message → **Commit & push** → confirm on github.com.
+6. 👤 **USER:** Log device model + Android version here after first successful run: `_______________`
+
+## Session checkpoint — 2026-06-11 (P0 code-complete)
+
+- **Done:** `GitPullService` + **Pull** in commit dialog; auto pull+retry on non-fast-forward push.
+- **Done:** IDE `CapabilityBanner` All-files CTA; agent errors show `Provider · model: …`.
+- **Done:** `AgentToolRoundTripTest`, `GitPushFailuresTest`; MVP_CHECKLIST marks code P0 complete vs 👤 USER device QA.
+- **Verify:** `.\gradlew.bat :app:compileDebugKotlin :app:testDebugUnitTest` — run before push.
+- **Next 👤 USER:** Manual QA script in `DOCS/MVP_CHECKLIST.md`.
+
+## Session checkpoint — 2026-06-11 (multi-provider LLM)
+
+- **Done:** Added OpenAI, Grok, OpenRouter clients (`OpenAiChatClientImpl` engine) + `LlmModelCatalog`
+  + filterable `ModelPickerDialog` (grey out providers missing keys).
+- **Done:** Expanded API keys dialog for all five providers; per-provider model persistence in
+  `LlmProviderStore`.
+- **Verify:** `.\gradlew.bat :app:compileDebugKotlin :app:testDebugUnitTest` **BUILD SUCCESSFUL**
+  (includes `OpenAiMessageCodecTest`, `GeminiMessageCodecTest`).
+- **Next:** Device smoke OpenRouter tool loop; optional custom OpenRouter slug field; fetch models
+  from `GET /api/v1/models` later.
+
+## Session checkpoint — 2026-06-11 (MVP hardening pass)
+
+- **Done:** Fixed Gemini multi-turn agent tools via `GeminiMessageCodec` (`tool_use` → `functionCall`);
+  4 unit tests in `GeminiMessageCodecTest`.
+- **Done:** Git auth for opened (non-cloned) repos — `GitAuthDialog`, palette **Save git credentials**,
+  commit dialog **Save git token** link, `GitRepoUiState.pushReady` gates push.
+- **Done:** Startup gateway workspace tip + **Grant All files access** deep link when missing.
+- **Done:** README 5-minute device demo; `MVP_CHECKLIST.md` updated with completed P0 items.
+- **Verify:** `.\gradlew.bat :app:compileDebugKotlin :app:testDebugUnitTest` **BUILD SUCCESSFUL**.
+- **Next (human/device):** Run `DOCS/MVP_CHECKLIST.md` manual QA script on tablet/emulator — especially
+  Gemini `read_file` + `edit_file` loop and HTTPS push smoke.
+- **Next (code):** `git pull` on non-fast-forward reject; optional `GitPushService` bare-repo test.
+
 ## Session checkpoint — 2026-05-14 (persistent audit timeline shipped)
 
 - **Done:** Added persistent audit timeline UI as the next natural roadmap slice:

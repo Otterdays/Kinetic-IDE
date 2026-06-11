@@ -2,3 +2,6 @@
 sdk.dir=C:/Users/you/AppData/Local/Android/Sdk
 anthropicApiKey=
 geminiApiKey=
+openAiApiKey=
+grokApiKey=
+openrouterApiKey=

@@ -21,8 +21,6 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Key
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tabletaide.ide.data.LlmCredentialState
 import com.tabletaide.ide.data.LlmProvider
+import com.tabletaide.ide.data.LlmSelectionState
 import com.tabletaide.ide.data.TelemetrySummary
 import com.tabletaide.ide.ui.theme.KineticColors
 import java.util.Locale
@@ -58,7 +57,7 @@ fun AgentChatPanel(
     busy: Boolean,
     enhancingPrompt: Boolean,
     error: String?,
-    currentProvider: LlmProvider,
+    selection: LlmSelectionState,
     credentials: LlmCredentialState,
     telemetrySummary: TelemetrySummary,
     composerDraft: String,
@@ -66,7 +65,7 @@ fun AgentChatPanel(
     onSend: () -> Unit,
     onEnhancePrompt: () -> Unit,
     onClear: () -> Unit,
-    onProviderChange: (LlmProvider) -> Unit,
+    onModelSelect: (LlmProvider, String) -> Unit,
     onOpenApiKeys: () -> Unit,
     /** Workspace-relative revert for captured write/edit tool rows ([TRACE: DOCS/ROADMAP.md] Epic 2.2). */
     onRevertToolMutation: (String) -> Unit,
@@ -76,14 +75,15 @@ fun AgentChatPanel(
     onReapplyCommandMutation: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var providerMenuOpen by remember { mutableStateOf(false) }
+    var modelPickerVisible by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
+    val currentProvider = selection.provider
     val hasSelectedProviderKey = credentials.hasKey(currentProvider)
     val sendEnabled = !busy && !enhancingPrompt && composerDraft.isNotBlank() && hasSelectedProviderKey
     val enhanceEnabled =
         !busy && !enhancingPrompt && composerDraft.isNotBlank() && hasSelectedProviderKey
-    val providerLabel = if (hasSelectedProviderKey) {
-        currentProvider.displayName
+    val modelLabel = if (hasSelectedProviderKey) {
+        "${selection.provider.displayName} · ${selection.label}"
     } else {
         "Add API key"
     }
@@ -116,31 +116,28 @@ fun AgentChatPanel(
                         color = KineticColors.onSurface,
                         modifier = Modifier.padding(start = 10.dp),
                     )
-                    Box {
-                        Text(
-                            text = providerLabel,
-                            fontSize = 9.sp,
-                            color = KineticColors.onSurfaceVariant,
-                            modifier = Modifier
-                                .padding(start = 10.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .clickable { providerMenuOpen = true }
-                        )
-                        DropdownMenu(
-                            expanded = providerMenuOpen,
-                            onDismissRequest = { providerMenuOpen = false },
-                        ) {
-                            LlmProvider.entries.forEach { provider ->
-                                DropdownMenuItem(
-                                    text = { Text(provider.displayName) },
-                                    onClick = {
-                                        onProviderChange(provider)
-                                        providerMenuOpen = false
-                                    },
-                                )
-                            }
-                        }
-                    }
+                    Text(
+                        text = modelLabel,
+                        fontSize = 9.sp,
+                        color = KineticColors.onSurfaceVariant,
+                        modifier = Modifier
+                            .padding(start = 10.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable { modelPickerVisible = true },
+                        maxLines = 1,
+                    )
+                    ModelPickerDialog(
+                        visible = modelPickerVisible,
+                        currentProvider = selection.provider,
+                        currentModelId = selection.modelId,
+                        credentials = credentials,
+                        onDismiss = { modelPickerVisible = false },
+                        onSelect = onModelSelect,
+                        onOpenApiKeys = {
+                            modelPickerVisible = false
+                            onOpenApiKeys()
+                        },
+                    )
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -166,7 +163,7 @@ fun AgentChatPanel(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    "ASSISTANT STATUS · ${providerLabel.uppercase()}",
+                    "ASSISTANT STATUS · ${modelLabel.uppercase()}",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp,

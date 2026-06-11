@@ -7,6 +7,6 @@ import dagger.hilt.components.SingletonComponent
 @Module
 @InstallIn(SingletonComponent::class)
 object BinderModule {
-    // AnthropicClientImpl and GeminiClientImpl are auto-provided via @Singleton.
-    // AgentViewModel injects both and selects per provider setting.
+    // Llm clients (Anthropic, Gemini, OpenAI, Grok, OpenRouter) are auto-provided via @Singleton.
+    // LlmClientResolver selects per provider + saved model.
 }

@@ -47,6 +47,7 @@ data class GitRepoUiState(
     val repoName: String = "",
     val branchName: String = "main",
     val upstreamBranch: String? = null,
+    val remoteHost: String? = null,
     val aheadCount: Int = 0,
     val behindCount: Int = 0,
     val stagedCount: Int = 0,
@@ -55,15 +56,22 @@ data class GitRepoUiState(
     val clean: Boolean = true,
     val canCommit: Boolean = false,
     val canPush: Boolean = false,
+    val hasSavedAuth: Boolean = false,
+    val pushReady: Boolean = false,
     val message: String? = null,
 ) {
     companion object {
-        fun fromSnapshot(snapshot: GitStatusSnapshot): GitRepoUiState {
+        fun fromSnapshot(snapshot: GitStatusSnapshot, hasSavedAuth: Boolean): GitRepoUiState {
+            val remoteHost = snapshot.upstreamRemoteUrl?.let { url ->
+                GitRemoteSpec.parseHttps(url)?.host
+            }
+            val canPush = snapshot.canPush
             return GitRepoUiState(
                 available = true,
                 repoName = snapshot.repoName,
                 branchName = snapshot.branchName,
                 upstreamBranch = snapshot.upstreamBranch,
+                remoteHost = remoteHost,
                 aheadCount = snapshot.aheadCount,
                 behindCount = snapshot.behindCount,
                 stagedCount = snapshot.stagedPaths.size,
@@ -71,11 +79,22 @@ data class GitRepoUiState(
                 untrackedCount = snapshot.untrackedPaths.size,
                 clean = snapshot.clean,
                 canCommit = snapshot.canCommit,
-                canPush = snapshot.canPush,
+                canPush = canPush,
+                hasSavedAuth = hasSavedAuth,
+                pushReady = canPush && hasSavedAuth,
             )
         }
     }
 }
+
+data class GitAuthDialogState(
+    val visible: Boolean = false,
+    val host: String = "",
+    val username: String = "",
+    val token: String = "",
+    val busy: Boolean = false,
+    val errorMessage: String? = null,
+)
 
 data class GitCommitRequest(
     val repository: GitRepositoryReady,
@@ -103,6 +122,19 @@ data class GitPushResult(
     val branchName: String,
     val upstreamBranch: String,
     val remoteName: String,
+    val message: String,
+)
+
+data class GitPullRequest(
+    val repository: GitRepositoryReady,
+    val branchName: String,
+    val upstreamBranch: String,
+    val remoteName: String,
+    val remoteUrl: String,
+)
+
+data class GitPullResult(
+    val branchName: String,
     val message: String,
 )
 

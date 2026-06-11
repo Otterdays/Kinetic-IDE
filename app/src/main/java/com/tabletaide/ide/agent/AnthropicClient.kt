@@ -1,6 +1,6 @@
 package com.tabletaide.ide.agent
 
-import com.tabletaide.ide.BuildConfig
+import com.tabletaide.ide.data.LlmProvider
 import com.tabletaide.ide.data.LlmProviderStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -38,9 +38,7 @@ class AnthropicClientImpl @Inject constructor(
         tools: JSONArray?,
         maxTokens: Int,
     ): Flow<StreamEvent> = channelFlow {
-        val key = providerStore.getCredentialState().anthropicApiKey.ifBlank {
-            BuildConfig.ANTHROPIC_API_KEY
-        }
+        val key = providerStore.resolveApiKey(LlmProvider.ANTHROPIC)
         if (key.isBlank()) {
             send(StreamEvent.Failure("Missing Anthropic API key. Add one from AI Architect > API keys."))
             send(StreamEvent.Finished)

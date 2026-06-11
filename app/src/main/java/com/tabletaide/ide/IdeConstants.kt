@@ -5,9 +5,6 @@ object IdeConstants {
     const val LARGE_FILE_CHAR_THRESHOLD = 1_000_000
     const val LARGE_FILE_LINE_SOFT_THRESHOLD = 8_000
 
-    // NOTE: verify model id in Anthropic docs; change if API returns 404.
-    const val ANTHROPIC_MODEL = "claude-3-5-sonnet-20241022"
-    const val GEMINI_MODEL = "gemini-2.0-flash"
     const val MAX_OUTPUT_TOKENS = 4096
     const val MAX_TOOL_ROUNDS = 8
     const val GIT_COMMIT_PATH_LIMIT = 24

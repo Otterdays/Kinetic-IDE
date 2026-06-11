@@ -31,7 +31,7 @@ Design reference (Kinetic Syntax — `stitch_sample_1`):
 |------|-------------------|
 | **Workspace** | Startup gateway, recent workspaces, starter projects, SAF-backed open folder flow, inline capability banners |
 | **Editor** | Multi-tab surface, undo/redo, autosave, dirty guards, large-file fallback, line gutter + breadcrumbs |
-| **Agent** | Claude + Gemini chat, in-app API key settings, prompt enhancement, tool cards, receipts, apply/revert for file edits |
+| **Agent** | Claude, Gemini, OpenAI, Grok, and OpenRouter — filterable model picker, in-app API keys, prompt enhancement, tool cards, receipts, apply/revert for file edits |
 | **Tools** | `list_files`, `read_file`, `write_file`, `edit_file`, `search_files`, `create_directory`, `rename_path`, `delete_path`, `run_command` |
 | **Git** | HTTPS token clone, saved auth, repo status, AI commit messages, commit, tracked-branch push |
 | **Shell** | In-app workspace runner with execute, rerun, cancel, clear, and terminal/output/debug panes |
@@ -50,6 +50,8 @@ and Rust/NDK core — see [`claude_ide_recommendation.html`](claude_ide_recommen
   command runner, not yet a PTY terminal or debugger host.
 - LSP, diagnostics, go-to-definition, hover, and richer project-wide navigation are still roadmap
   work.
+- GitHub HTTPS push needs a PAT with **`repo`** scope (or host-equivalent write access).
+- AI file edits default to **Ask** trust policy — set **Settings → File changes → Auto** for faster demos.
 
 ---
 
@@ -72,6 +74,19 @@ gradlew.bat :app:assembleDebug
 ```
 
 Output: `app/build/outputs/apk/debug/app-debug.apk`
+
+### 5-minute device demo (MVP happy path)
+
+1. Install the debug APK on a tablet or emulator (API 26+).
+2. On the startup screen, tap **Grant All files access** if shown.
+3. **Clone repository** → pick `Downloads` → HTTPS URL + GitHub PAT (`repo` scope) → save token.
+4. In the AI panel: key icon → paste API key(s) → tap the model label → filter and pick a model (providers without keys are greyed out). **OpenRouter** uses one key for many models ([quickstart](https://openrouter.ai/docs/quickstart)).
+5. Ask: *“Read README.md and add `<!-- kinetic test -->` at the top.”* Approve file changes if prompted.
+6. Command palette (`Ctrl+P`) → **Commit and push** → generate message → **Commit & push**.
+
+For repos opened outside the app: command palette → **Save git credentials** before pushing.
+
+Full ship checklist: [`DOCS/MVP_CHECKLIST.md`](DOCS/MVP_CHECKLIST.md).
 
 ---
 

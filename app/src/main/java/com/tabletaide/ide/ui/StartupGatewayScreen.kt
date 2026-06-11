@@ -218,6 +218,34 @@ fun StartupGatewayScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(top = 10.dp),
                     )
+                    Text(
+                        text = if (hasAllFilesAccess) {
+                            "Tip: clone or open repos under Downloads or Documents for git, push, and shell support."
+                        } else {
+                            "Git clone, push, and shell commands need All files access plus a shared-storage folder (Downloads or Documents)."
+                        },
+                        color = if (hasAllFilesAccess) {
+                            KineticColors.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    if (!hasAllFilesAccess && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        TextButton(
+                            onClick = {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                                        data = Uri.parse("package:${context.packageName}")
+                                    },
+                                )
+                            },
+                            modifier = Modifier.padding(top = 4.dp),
+                        ) {
+                            Text("Grant All files access")
+                        }
+                    }
                 }
             }
 

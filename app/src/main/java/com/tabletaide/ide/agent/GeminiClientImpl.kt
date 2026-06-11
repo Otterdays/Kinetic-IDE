@@ -1,6 +1,6 @@
 package com.tabletaide.ide.agent
 
-import com.tabletaide.ide.BuildConfig
+import com.tabletaide.ide.data.LlmProvider
 import com.tabletaide.ide.data.LlmProviderStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -28,9 +28,7 @@ class GeminiClientImpl @Inject constructor(
         tools: JSONArray?,
         maxTokens: Int,
     ): Flow<StreamEvent> = channelFlow {
-        val key = providerStore.getCredentialState().geminiApiKey.ifBlank {
-            BuildConfig.GEMINI_API_KEY
-        }
+        val key = providerStore.resolveApiKey(LlmProvider.GEMINI)
         if (key.isBlank()) {
             send(StreamEvent.Failure("Missing Gemini API key. Add one from AI Architect > API keys."))
             send(StreamEvent.Finished)
@@ -81,7 +79,7 @@ class GeminiClientImpl @Inject constructor(
         }
 
         val body = JSONObject().apply {
-            put("contents", convertMessages(messages))
+            put("contents", GeminiMessageCodec.convertMessages(messages))
             if (systemInstruction != null) {
                 put("systemInstruction", systemInstruction)
             }
@@ -135,54 +133,6 @@ class GeminiClientImpl @Inject constructor(
         }
         send(StreamEvent.Finished)
     }.flowOn(Dispatchers.IO)
-
-    private fun convertMessages(messages: JSONArray): JSONArray {
-        val contents = JSONArray()
-        for (i in 0 until messages.length()) {
-            val msg = messages.getJSONObject(i)
-            val role = when (msg.optString("role")) {
-                "user" -> "user"
-                "assistant" -> "model"
-                else -> continue
-            }
-            val content = msg.opt("content")
-
-            if (content is JSONArray) {
-                val parts = JSONArray()
-                for (j in 0 until content.length()) {
-                    val part = content.getJSONObject(j)
-                    when (part.optString("type")) {
-                        "text" -> {
-                            parts.put(JSONObject().put("text", part.optString("text", "")))
-                        }
-                        "tool_result" -> {
-                            val toolUseId = part.optString("tool_use_id", "unknown")
-                            val toolName = part.optString("tool_name").ifBlank { toolUseId }
-                            parts.put(JSONObject().apply {
-                                put("functionResponse", JSONObject().apply {
-                                    put("name", toolName)
-                                    put("response", JSONObject().apply {
-                                        put("result", part.optString("content", ""))
-                                        put("toolUseId", toolUseId)
-                                    })
-                                })
-                            })
-                        }
-                    }
-                }
-                contents.put(JSONObject().apply {
-                    put("role", role)
-                    put("parts", parts)
-                })
-            } else if (content is String) {
-                contents.put(JSONObject().apply {
-                    put("role", role)
-                    put("parts", JSONArray().put(JSONObject().put("text", content)))
-                })
-            }
-        }
-        return contents
-    }
 
     private fun parseGeminiStreamLine(line: String, toolCallMap: MutableMap<String, PartialToolCall>): StreamEvent? {
         if (!line.startsWith("[")) return null

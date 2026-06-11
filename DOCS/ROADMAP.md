@@ -38,7 +38,8 @@ Build a tablet-first Android IDE that feels like a real development environment:
 - **Audit timeline:** persisted and viewable; filter/sort/export remain.
 - **Prompt context:** open tabs/selection appendix exists; pinnable blocks, templates, ranking, diagnostics/git context expansion remain.
 - **Trust policy:** app-wide today; per-workspace/per-tool rules remain.
-- **Git UI:** commit/push exists; stage/unstage, hunk discard, branch UI, merge/conflict UI remain.
+- **Git UI:** commit/push exists; in-app **Save git credentials** for HTTPS push on opened repos;
+  stage/unstage, hunk discard, branch UI, merge/conflict UI, and pull-on-reject remain.
 
 ### Not Started
 

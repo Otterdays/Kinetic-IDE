@@ -3,9 +3,7 @@ package com.tabletaide.ide.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tabletaide.ide.IdeConstants
-import com.tabletaide.ide.agent.AnthropicClientImpl
-import com.tabletaide.ide.agent.GeminiClientImpl
-import com.tabletaide.ide.agent.LlmClient
+import com.tabletaide.ide.agent.LlmClientResolver
 import com.tabletaide.ide.agent.PromptEnhancementService
 import com.tabletaide.ide.agent.StreamEvent
 import com.tabletaide.ide.agent.ToolRouter
@@ -24,6 +22,7 @@ import com.tabletaide.ide.data.CommandSnapshotDiff
 import com.tabletaide.ide.data.LlmCredentialState
 import com.tabletaide.ide.data.LlmProvider
 import com.tabletaide.ide.data.LlmProviderStore
+import com.tabletaide.ide.data.LlmSelectionState
 import com.tabletaide.ide.data.SnapshotConflict
 import com.tabletaide.ide.data.TelemetryEvent
 import com.tabletaide.ide.data.TelemetryEventType
@@ -48,8 +47,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AgentViewModel @Inject constructor(
-    private val anthropicClient: AnthropicClientImpl,
-    private val geminiClient: GeminiClientImpl,
+    private val llmClientResolver: LlmClientResolver,
     private val promptEnhancementService: PromptEnhancementService,
     private val toolRouter: ToolRouter,
     private val trustStore: AgentTrustStore,
@@ -60,17 +58,15 @@ class AgentViewModel @Inject constructor(
     private val telemetryStore: AgentTelemetryStore,
 ) : ViewModel() {
 
-    private fun getClient(): LlmClient = when (_provider.value) {
-        LlmProvider.ANTHROPIC -> anthropicClient
-        LlmProvider.GEMINI -> geminiClient
-    }
-
     private val apiHistory = JSONArray()
     private val toolsJson = toolRouter.toolDefinitions()
     private val toolSchemaError = toolRouter.validateToolDefinitions(toolsJson)
 
     private val _provider = MutableStateFlow(providerStore.getProvider())
     val provider: StateFlow<LlmProvider> = _provider.asStateFlow()
+
+    private val _selection = MutableStateFlow(providerStore.getSelection())
+    val selection: StateFlow<LlmSelectionState> = _selection.asStateFlow()
 
     private val _credentials = MutableStateFlow(providerStore.getCredentialState())
     val credentials: StateFlow<LlmCredentialState> = _credentials.asStateFlow()
@@ -134,6 +130,18 @@ class AgentViewModel @Inject constructor(
     fun setProvider(provider: LlmProvider) {
         providerStore.setProvider(provider)
         _provider.value = provider
+        _selection.value = providerStore.getSelection()
+        _error.value = null
+    }
+
+    fun setSelection(provider: LlmProvider, modelId: String) {
+        if (!providerStore.getCredentialState().hasKey(provider)) {
+            _error.value = "Add an API key for ${provider.displayName} before selecting this model."
+            return
+        }
+        providerStore.setSelection(provider, modelId)
+        _provider.value = provider
+        _selection.value = providerStore.getSelection()
         _error.value = null
     }
 
@@ -313,13 +321,11 @@ class AgentViewModel @Inject constructor(
             var streamError: String? = null
             var firstTokenMs: Long? = null
 
-            val model = when (_provider.value) {
-                LlmProvider.ANTHROPIC -> IdeConstants.ANTHROPIC_MODEL
-                LlmProvider.GEMINI -> IdeConstants.GEMINI_MODEL
-            }
+            val activeProvider = _provider.value
+            val model = llmClientResolver.modelFor(activeProvider)
             val modelSpanId = UUID.randomUUID().toString()
             val modelStartedAt = System.currentTimeMillis()
-            getClient().streamMessage(
+            llmClientResolver.clientFor(activeProvider).streamMessage(
                 model = model,
                 systemPrompt = systemPrompt,
                 messages = apiHistory,
@@ -346,7 +352,7 @@ class AgentViewModel @Inject constructor(
             completionTokensForTurn += completionTokens
 
             if (streamError != null) {
-                _error.value = streamError
+                _error.value = "${activeProvider.displayName} · $model: $streamError"
                 finalizeStreamingAssistant(textBuf.toString().ifEmpty { "(error)" })
                 recordTelemetry(
                     type = TelemetryEventType.ERROR_RECORDED,

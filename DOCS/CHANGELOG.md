@@ -10,6 +10,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Git pull MVP:** `GitPullService`, commit-dialog **Pull** when behind, automatic pull+retry when
+  push is rejected non-fast-forward.
+
+- **P0 polish:** IDE capability banner All-files CTA; agent stream errors include provider + model id;
+  `AgentToolRoundTripTest` + `GitPushFailuresTest`.
+
+- **Multi-provider LLM routing:** OpenAI, Grok (xAI), and OpenRouter clients (OpenAI-compatible
+  streaming + tools); `LlmClientResolver`, `LlmModelCatalog`, filterable `ModelPickerDialog` with
+  per-provider sections; providers without API keys greyed out; expanded API keys dialog.
+
+- **[MVP_CHECKLIST P0]** `GeminiMessageCodec` — maps assistant `tool_use` blocks to Gemini `functionCall`
+  parts so multi-turn agent file edits work; unit tests in `GeminiMessageCodecTest`.
+
+- **[MVP_CHECKLIST P0]** **Save git credentials** flow: `GitAuthDialog`, command-palette entry, commit
+  dialog link, and `GitRepoUiState.pushReady` (tracked upstream + saved HTTPS token).
+
+- **[MVP_CHECKLIST]** Startup gateway tip for shared-storage workspaces and All files access, with
+  settings deep link when permission is missing.
+
+- **[MVP_CHECKLIST]** README 5-minute device demo path and link to `DOCS/MVP_CHECKLIST.md`.
+
 - **[ROADMAP Natural next slice / Persistent audit timeline]** Added a dedicated `AuditTimelinePanel`
   that surfaces the `AgentAuditStore` JSONL entries in a browsable dialog: expandable cards show tool
   name, target, status, risk, policy, approval, duration, and mutation summary. Accessible from the

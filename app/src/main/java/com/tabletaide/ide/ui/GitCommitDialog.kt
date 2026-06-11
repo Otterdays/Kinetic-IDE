@@ -33,6 +33,8 @@ fun GitCommitDialog(
     onGenerateMessage: () -> Unit,
     onCommit: () -> Unit,
     onCommitAndPush: () -> Unit,
+    onPull: () -> Unit,
+    onOpenGitAuth: () -> Unit,
 ) {
     if (!dialogState.visible) return
 
@@ -62,14 +64,31 @@ fun GitCommitDialog(
                 )
                 if (!gitState.upstreamBranch.isNullOrBlank()) {
                     Text(
-                        text = "Tracked upstream: ${gitState.upstreamBranch}",
+                        text = buildString {
+                            append("Tracked upstream: ${gitState.upstreamBranch}")
+                            if (gitState.behindCount > 0) {
+                                append("  ·  behind ${gitState.behindCount}")
+                            }
+                            if (gitState.aheadCount > 0) {
+                                append("  ·  ahead ${gitState.aheadCount}")
+                            }
+                        },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
                     Text(
-                        text = "Current branch has no tracked upstream yet.",
+                        text = "Current branch has no tracked upstream yet. Clone from the app or set upstream outside Kinetic.",
                         color = MaterialTheme.colorScheme.error,
                     )
+                }
+                if (gitState.canPush && !gitState.hasSavedAuth) {
+                    Text(
+                        text = "Push needs a saved HTTPS token for ${gitState.remoteHost ?: "this host"}.",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    TextButton(onClick = onOpenGitAuth, enabled = !dialogState.busy) {
+                        Text("Save git token")
+                    }
                 }
                 HorizontalDivider()
                 OutlinedTextField(
@@ -135,6 +154,15 @@ fun GitCommitDialog(
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(
+                    onClick = onPull,
+                    enabled = !dialogState.busy &&
+                        !dialogState.generatingMessage &&
+                        gitState.pushReady &&
+                        gitState.behindCount > 0,
+                ) {
+                    Text("Pull")
+                }
+                TextButton(
                     onClick = onGenerateMessage,
                     enabled = !dialogState.busy &&
                         !dialogState.generatingMessage &&
@@ -158,7 +186,7 @@ fun GitCommitDialog(
                         !dialogState.generatingMessage &&
                         gitState.available &&
                         (!gitState.clean || gitState.aheadCount > 0) &&
-                        gitState.canPush,
+                        gitState.pushReady,
                 ) {
                     Text(if (gitState.clean && gitState.aheadCount > 0) "Push" else "Commit & push")
                 }

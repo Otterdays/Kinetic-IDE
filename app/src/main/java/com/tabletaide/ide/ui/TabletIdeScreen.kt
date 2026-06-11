@@ -41,6 +41,11 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
@@ -81,6 +86,7 @@ fun TabletIdeScreen(
     val undoRedoEpoch by ideVm.undoRedoEpoch.collectAsState()
     val gitRepoState by ideVm.gitRepoState.collectAsState()
     val gitCommitDialogState by ideVm.gitCommitDialogState.collectAsState()
+    val gitAuthDialogState by ideVm.gitAuthDialogState.collectAsState()
     val commandRunnerState by ideVm.commandRunnerState.collectAsState()
     val runCommandDialogState by ideVm.runCommandDialogState.collectAsState()
 
@@ -96,7 +102,7 @@ fun TabletIdeScreen(
     val busy by agentVm.busy.collectAsState()
     val enhancingPrompt by agentVm.enhancingPrompt.collectAsState()
     val agentError by agentVm.error.collectAsState()
-    val provider by agentVm.provider.collectAsState()
+    val modelSelection by agentVm.selection.collectAsState()
     val credentials by agentVm.credentials.collectAsState()
     val telemetrySummary by agentVm.telemetrySummary.collectAsState()
     val auditEntries by agentVm.auditEntries.collectAsState()
@@ -120,9 +126,11 @@ fun TabletIdeScreen(
         ),
     )
 
+    val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
+    var hasAllFilesAccess by remember { mutableStateOf(ideVm.hasAllFilesAccess()) }
 
     var dirtyCloseTabIndex by remember { mutableStateOf<Int?>(null) }
     var commandPaletteVisible by remember { mutableStateOf(false) }
@@ -134,8 +142,10 @@ fun TabletIdeScreen(
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) {
-                ideVm.persistDraftIfPossible()
+            when (event) {
+                Lifecycle.Event.ON_STOP -> ideVm.persistDraftIfPossible()
+                Lifecycle.Event.ON_RESUME -> hasAllFilesAccess = ideVm.hasAllFilesAccess()
+                else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -153,7 +163,9 @@ fun TabletIdeScreen(
         activePath,
         gitRepoState.available,
         gitRepoState.clean,
-        gitRepoState.canPush,
+        gitRepoState.pushReady,
+        gitRepoState.remoteHost,
+        gitRepoState.hasSavedAuth,
         gitRepoState.branchName,
         commandRunnerState.available,
         commandRunnerState.busy,
@@ -213,14 +225,26 @@ fun TabletIdeScreen(
             ),
             PaletteCommand(
                 title = "Commit and push",
-                subtitle = if (gitRepoState.canPush) {
-                    "Commit current changes and push tracked branch"
-                } else {
-                    "Current branch needs a tracked upstream"
+                subtitle = when {
+                    !gitRepoState.available -> "Open a git repo root first"
+                    !gitRepoState.canPush -> "Current branch needs a tracked upstream"
+                    !gitRepoState.hasSavedAuth -> "Save an HTTPS git token first"
+                    else -> "Commit current changes and push tracked branch"
                 },
                 keywords = listOf("git", "commit", "push", "publish", "remote"),
                 enabled = gitRepoState.available,
                 onInvoke = { ideVm.showCommitDialog() },
+            ),
+            PaletteCommand(
+                title = "Save git credentials",
+                subtitle = if (gitRepoState.remoteHost != null) {
+                    "HTTPS token for ${gitRepoState.remoteHost}"
+                } else {
+                    "Open a git repo with an HTTPS remote first"
+                },
+                keywords = listOf("git", "token", "auth", "credentials", "pat", "push"),
+                enabled = gitRepoState.remoteHost != null,
+                onInvoke = { ideVm.showGitAuthDialog() },
             ),
             PaletteCommand(
                 title = "Next tab",
@@ -265,8 +289,8 @@ fun TabletIdeScreen(
             ),
             PaletteCommand(
                 title = "API keys",
-                subtitle = "Configure Anthropic and Gemini on device",
-                keywords = listOf("api", "key", "keys", "llm", "provider", "ai"),
+                subtitle = "Claude, Gemini, OpenAI, Grok, OpenRouter",
+                keywords = listOf("api", "key", "keys", "llm", "provider", "ai", "openrouter", "grok"),
                 enabled = !busy,
                 onInvoke = { apiKeysDialogVisible = true },
             ),
@@ -458,6 +482,15 @@ fun TabletIdeScreen(
         onGenerateMessage = ideVm::generateCommitMessage,
         onCommit = { ideVm.commitChanges(pushAfterCommit = false) },
         onCommitAndPush = { ideVm.commitChanges(pushAfterCommit = true) },
+        onPull = ideVm::pullTrackedBranch,
+        onOpenGitAuth = ideVm::showGitAuthDialog,
+    )
+    GitAuthDialog(
+        dialogState = gitAuthDialogState,
+        onDismiss = ideVm::hideGitAuthDialog,
+        onUsernameChange = ideVm::updateGitAuthUsername,
+        onTokenChange = ideVm::updateGitAuthToken,
+        onSave = ideVm::saveGitAuth,
     )
     RunCommandDialog(
         dialogState = runCommandDialogState,
@@ -485,6 +518,7 @@ fun TabletIdeScreen(
                     settingsDialogVisible ||
                     auditTimelineVisible ||
                     gitCommitDialogState.visible ||
+                    gitAuthDialogState.visible ||
                     agentToolApprovalState.visible
                 ) {
                     return@onPreviewKeyEvent false
@@ -584,8 +618,18 @@ fun TabletIdeScreen(
                 )
                 CapabilityBanner(
                     hasWorkspaceRoot = ideVm.hasWorkspaceRoot(),
+                    hasAllFilesAccess = hasAllFilesAccess,
                     gitState = gitRepoState,
                     runnerState = commandRunnerState,
+                    onOpenAllFilesAccess = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            context.startActivity(
+                                Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                                    data = Uri.parse("package:${context.packageName}")
+                                },
+                            )
+                        }
+                    },
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                 )
                 BoxWithConstraints(
@@ -646,7 +690,7 @@ fun TabletIdeScreen(
                             busy = busy,
                             enhancingPrompt = enhancingPrompt,
                             error = agentError,
-                            currentProvider = provider,
+                            selection = modelSelection,
                             credentials = credentials,
                             telemetrySummary = telemetrySummary,
                             composerDraft = composerDraft,
@@ -658,7 +702,7 @@ fun TabletIdeScreen(
                                 agentVm.enhanceComposerDraft(ideVm.buildAgentWorkspaceContext())
                             },
                             onClear = agentVm::clearConversation,
-                            onProviderChange = agentVm::setProvider,
+                            onModelSelect = agentVm::setSelection,
                             onOpenApiKeys = { apiKeysDialogVisible = true },
                             onRevertToolMutation = agentVm::revertToolMutation,
                             onApplyToolMutation = agentVm::applyToolMutation,
@@ -826,33 +870,37 @@ private fun ApiKeysDialog(
     var geminiKey by remember(credentials.geminiApiKey) {
         mutableStateOf(credentials.geminiApiKey)
     }
+    var openAiKey by remember(credentials.openAiApiKey) {
+        mutableStateOf(credentials.openAiApiKey)
+    }
+    var grokKey by remember(credentials.grokApiKey) {
+        mutableStateOf(credentials.grokApiKey)
+    }
+    var openRouterKey by remember(credentials.openRouterApiKey) {
+        mutableStateOf(credentials.openRouterApiKey)
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("API keys") },
         text = {
-            Column {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+            ) {
                 Text(
                     "Keys are saved on this device and used immediately. Build-time local.properties keys still work as fallback.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                OutlinedTextField(
-                    value = anthropicKey,
-                    onValueChange = { anthropicKey = it },
-                    label = { Text("Anthropic API key") },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 14.dp),
-                )
-                OutlinedTextField(
-                    value = geminiKey,
-                    onValueChange = { geminiKey = it },
-                    label = { Text("Gemini API key") },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 10.dp),
+                ApiKeyField("Claude (Anthropic)", anthropicKey, { anthropicKey = it })
+                ApiKeyField("Gemini (Google)", geminiKey, { geminiKey = it })
+                ApiKeyField("OpenAI", openAiKey, { openAiKey = it })
+                ApiKeyField("Grok (xAI)", grokKey, { grokKey = it })
+                ApiKeyField("OpenRouter", openRouterKey, { openRouterKey = it })
+                Text(
+                    "OpenRouter uses one key for hundreds of models via openrouter.ai. See openrouter.ai/models for slugs.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 8.dp),
                 )
             }
         },
@@ -866,11 +914,31 @@ private fun ApiKeysDialog(
                 onClick = {
                     onSave(LlmProvider.ANTHROPIC, anthropicKey)
                     onSave(LlmProvider.GEMINI, geminiKey)
+                    onSave(LlmProvider.OPENAI, openAiKey)
+                    onSave(LlmProvider.GROK, grokKey)
+                    onSave(LlmProvider.OPENROUTER, openRouterKey)
                     onDismiss()
                 },
             ) {
                 Text("Save")
             }
         },
+    )
+}
+
+@Composable
+private fun ApiKeyField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        singleLine = true,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp),
     )
 }

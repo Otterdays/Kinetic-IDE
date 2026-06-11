@@ -1,7 +1,6 @@
 package com.tabletaide.ide.agent
 
 import com.tabletaide.ide.IdeConstants
-import com.tabletaide.ide.data.LlmProvider
 import com.tabletaide.ide.data.LlmProviderStore
 import kotlinx.coroutines.flow.collect
 import org.json.JSONArray
@@ -11,20 +10,13 @@ import javax.inject.Singleton
 
 @Singleton
 class GitCommitMessageService @Inject constructor(
-    private val anthropicClient: AnthropicClientImpl,
-    private val geminiClient: GeminiClientImpl,
+    private val llmClientResolver: LlmClientResolver,
     private val providerStore: LlmProviderStore,
 ) {
     suspend fun generateCommitMessage(gitContext: String): Result<String> {
         val provider = providerStore.getProvider()
-        val client = when (provider) {
-            LlmProvider.ANTHROPIC -> anthropicClient
-            LlmProvider.GEMINI -> geminiClient
-        }
-        val model = when (provider) {
-            LlmProvider.ANTHROPIC -> IdeConstants.ANTHROPIC_MODEL
-            LlmProvider.GEMINI -> IdeConstants.GEMINI_MODEL
-        }
+        val client = llmClientResolver.clientFor(provider)
+        val model = llmClientResolver.modelFor(provider)
         val textBuffer = StringBuilder()
         var failure: String? = null
         client.streamMessage(

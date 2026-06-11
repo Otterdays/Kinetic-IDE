@@ -1,5 +1,6 @@
 package com.tabletaide.ide.ui
 
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -25,8 +27,10 @@ import com.tabletaide.ide.data.GitRepoUiState
 @Composable
 fun CapabilityBanner(
     hasWorkspaceRoot: Boolean,
+    hasAllFilesAccess: Boolean,
     gitState: GitRepoUiState,
     runnerState: CommandRunnerUiState,
+    onOpenAllFilesAccess: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val notices = remember(
@@ -52,7 +56,10 @@ fun CapabilityBanner(
             }
         }
     }
-    if (notices.isEmpty()) return
+    val needsAllFilesAccess = hasWorkspaceRoot &&
+        !hasAllFilesAccess &&
+        notices.any { it.contains("All files access", ignoreCase = true) }
+    if (notices.isEmpty() && !needsAllFilesAccess) return
 
     Column(
         modifier = modifier
@@ -86,7 +93,7 @@ fun CapabilityBanner(
         }
         if (hasWorkspaceRoot) {
             Text(
-                text = "Editing and AI workspace context are available. Some advanced features are still constrained here.",
+                text = "Use a shared-storage folder (Downloads/Documents) for git, push, and shell. Grant All files access when git or run is blocked.",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -97,6 +104,11 @@ fun CapabilityBanner(
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        if (needsAllFilesAccess && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            TextButton(onClick = onOpenAllFilesAccess) {
+                Text("Grant All files access")
+            }
         }
     }
 }

@@ -11,6 +11,8 @@ import com.tabletaide.ide.data.CloneTargetResolver
 import com.tabletaide.ide.data.CommandRunnerUiState
 import com.tabletaide.ide.data.EditorSessionStore
 import com.tabletaide.ide.data.ExplorerPinsStore
+import com.tabletaide.ide.data.GitAuthDialogState
+import com.tabletaide.ide.data.GitAuthEntry
 import com.tabletaide.ide.data.GitCommitDialogState
 import com.tabletaide.ide.data.GitCommitRequest
 import com.tabletaide.ide.data.GitCommitService
@@ -21,6 +23,9 @@ import com.tabletaide.ide.data.GitCloneService
 import com.tabletaide.ide.data.GitCloneSuccess
 import com.tabletaide.ide.data.GitIdentity
 import com.tabletaide.ide.data.GitIdentityStore
+import com.tabletaide.ide.data.GitPullRequest
+import com.tabletaide.ide.data.GitPullService
+import com.tabletaide.ide.data.GitPushFailures
 import com.tabletaide.ide.data.GitPushRequest
 import com.tabletaide.ide.data.GitPushService
 import com.tabletaide.ide.data.GitRepoUiState
@@ -93,6 +98,7 @@ class IdeViewModel @Inject constructor(
     private val gitStatusService: GitStatusService,
     private val gitCommitService: GitCommitService,
     private val gitPushService: GitPushService,
+    private val gitPullService: GitPullService,
     private val gitIdentityStore: GitIdentityStore,
     private val gitCommitMessageService: GitCommitMessageService,
     private val commandRunner: InAppCommandRunner,
@@ -120,6 +126,9 @@ class IdeViewModel @Inject constructor(
 
     private val _gitCommitDialogState = MutableStateFlow(GitCommitDialogState())
     val gitCommitDialogState: StateFlow<GitCommitDialogState> = _gitCommitDialogState.asStateFlow()
+
+    private val _gitAuthDialogState = MutableStateFlow(GitAuthDialogState())
+    val gitAuthDialogState: StateFlow<GitAuthDialogState> = _gitAuthDialogState.asStateFlow()
 
     private val _runCommandDialogState = MutableStateFlow(RunCommandDialogState())
     val runCommandDialogState: StateFlow<RunCommandDialogState> = _runCommandDialogState.asStateFlow()
@@ -671,6 +680,58 @@ class IdeViewModel @Inject constructor(
         _gitCommitDialogState.value = GitCommitDialogState()
     }
 
+    fun showGitAuthDialog(host: String? = null) {
+        val targetHost = host?.trim()?.lowercase().orEmpty().ifBlank {
+            _gitRepoState.value.remoteHost.orEmpty()
+        }
+        if (targetHost.isBlank()) {
+            _status.value = "Open a git repo with an HTTPS upstream before saving credentials."
+            return
+        }
+        val saved = gitAuthStore.peek(targetHost)
+        _gitAuthDialogState.value = GitAuthDialogState(
+            visible = true,
+            host = targetHost,
+            username = saved?.suggestedUsername
+                ?: com.tabletaide.ide.data.defaultGitUsernameForHost(targetHost),
+        )
+    }
+
+    fun hideGitAuthDialog() {
+        _gitAuthDialogState.value = GitAuthDialogState()
+    }
+
+    fun updateGitAuthUsername(username: String) {
+        _gitAuthDialogState.update { it.copy(username = username, errorMessage = null) }
+    }
+
+    fun updateGitAuthToken(token: String) {
+        _gitAuthDialogState.update { it.copy(token = token, errorMessage = null) }
+    }
+
+    fun saveGitAuth() {
+        val dialog = _gitAuthDialogState.value
+        if (dialog.busy || dialog.host.isBlank()) return
+        val token = dialog.token.trim()
+        if (token.isEmpty()) {
+            _gitAuthDialogState.update { it.copy(errorMessage = "Enter a personal access token.") }
+            return
+        }
+        _gitAuthDialogState.update { it.copy(busy = true, errorMessage = null) }
+        gitAuthStore.save(
+            GitAuthEntry(
+                host = dialog.host,
+                username = dialog.username.trim().ifEmpty {
+                    com.tabletaide.ide.data.defaultGitUsernameForHost(dialog.host)
+                },
+                token = token,
+            ),
+        )
+        _gitAuthDialogState.value = GitAuthDialogState()
+        _status.value = "Saved git credentials for ${dialog.host}"
+        refreshGitState()
+    }
+
     fun showRunCommandDialog(prefill: String = commandRunnerState.value.lastCommand) {
         val runnerState = commandRunnerState.value
         if (!runnerState.available) {
@@ -845,6 +906,20 @@ class IdeViewModel @Inject constructor(
             if (pushAfterCommit && !snapshot.hasTrackedUpstream) {
                 _gitCommitDialogState.update {
                     it.copy(errorMessage = "Current branch has no tracked upstream yet.")
+                }
+                return@launch
+            }
+            if (pushAfterCommit && !_gitRepoState.value.pushReady) {
+                val authHost = _gitRepoState.value.remoteHost
+                if (authHost != null && !_gitRepoState.value.hasSavedAuth) {
+                    _gitCommitDialogState.update {
+                        it.copy(errorMessage = "Save an HTTPS git token for $authHost before pushing.")
+                    }
+                    showGitAuthDialog(authHost)
+                } else {
+                    _gitCommitDialogState.update {
+                        it.copy(errorMessage = _gitRepoState.value.message ?: "Push is unavailable.")
+                    }
                 }
                 return@launch
             }
@@ -1080,7 +1155,11 @@ class IdeViewModel @Inject constructor(
                 gitRepository = resolution
                 gitSnapshot = snapshot
                 if (refreshUi) {
-                    _gitRepoState.value = GitRepoUiState.fromSnapshot(snapshot)
+                    val remoteHost = snapshot.upstreamRemoteUrl?.let { url ->
+                        GitRemoteSpec.parseHttps(url)?.host
+                    }
+                    val hasSavedAuth = remoteHost?.let { gitAuthStore.load(it) != null } ?: false
+                    _gitRepoState.value = GitRepoUiState.fromSnapshot(snapshot, hasSavedAuth)
                 }
                 resolution to snapshot
             }
@@ -1106,11 +1185,59 @@ class IdeViewModel @Inject constructor(
         )
     }
 
-    private suspend fun pushTrackedBranch(
+    fun pullTrackedBranch() {
+        if (_gitCommitDialogState.value.busy) return
+        viewModelScope.launch {
+            val state = resolveGitSnapshot(refreshUi = true) ?: run {
+                _gitCommitDialogState.update {
+                    it.copy(errorMessage = _gitRepoState.value.message)
+                }
+                return@launch
+            }
+            val (repository, snapshot) = state
+            if (!snapshot.hasTrackedUpstream) {
+                _gitCommitDialogState.update {
+                    it.copy(errorMessage = "Current branch has no tracked upstream yet.")
+                }
+                return@launch
+            }
+            if (!_gitRepoState.value.hasSavedAuth) {
+                showGitAuthDialog(_gitRepoState.value.remoteHost)
+                _gitCommitDialogState.update {
+                    it.copy(errorMessage = "Save git credentials before pulling.")
+                }
+                return@launch
+            }
+            _gitCommitDialogState.update {
+                it.copy(busy = true, progressMessage = "Pulling…", errorMessage = null)
+            }
+            pullTrackedBranch(repository, snapshot).fold(
+                onSuccess = {
+                    resolveGitSnapshot(refreshUi = true)
+                    _gitCommitDialogState.update { dialog ->
+                        dialog.copy(busy = false, progressMessage = null, errorMessage = null)
+                    }
+                    _status.value = it.message
+                },
+                onFailure = {
+                    resolveGitSnapshot(refreshUi = true)
+                    _gitCommitDialogState.update { dialog ->
+                        dialog.copy(
+                            busy = false,
+                            progressMessage = null,
+                            errorMessage = it.message ?: "Pull failed.",
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    private suspend fun pullTrackedBranch(
         repository: GitRepositoryReady,
         snapshot: GitStatusSnapshot,
-    ) = gitPushService.push(
-        request = GitPushRequest(
+    ) = gitPullService.pull(
+        request = GitPullRequest(
             repository = repository,
             branchName = snapshot.branchName,
             upstreamBranch = snapshot.upstreamBranch.orEmpty(),
@@ -1119,14 +1246,44 @@ class IdeViewModel @Inject constructor(
         ),
         onProgress = { progress ->
             _gitCommitDialogState.update { dialog ->
-                dialog.copy(
-                    busy = true,
-                    progressMessage = progress,
-                    errorMessage = null,
-                )
+                dialog.copy(busy = true, progressMessage = progress, errorMessage = null)
             }
         },
     )
+
+    private suspend fun pushTrackedBranch(
+        repository: GitRepositoryReady,
+        snapshot: GitStatusSnapshot,
+    ): Result<com.tabletaide.ide.data.GitPushResult> {
+        val request = GitPushRequest(
+            repository = repository,
+            branchName = snapshot.branchName,
+            upstreamBranch = snapshot.upstreamBranch.orEmpty(),
+            remoteName = snapshot.upstreamRemoteName.orEmpty(),
+            remoteUrl = snapshot.upstreamRemoteUrl.orEmpty(),
+        )
+        val onProgress: (String) -> Unit = { progress ->
+            _gitCommitDialogState.update { dialog ->
+                dialog.copy(busy = true, progressMessage = progress, errorMessage = null)
+            }
+        }
+        val firstAttempt = gitPushService.push(request, onProgress)
+        if (firstAttempt.isSuccess) return firstAttempt
+        val errorMessage = firstAttempt.exceptionOrNull()?.message
+        if (!GitPushFailures.isNonFastForward(errorMessage)) return firstAttempt
+        onProgress("Remote moved ahead — pulling latest changes…")
+        val pullResult = pullTrackedBranch(repository, snapshot)
+        if (pullResult.isFailure) {
+            return Result.failure(
+                IllegalStateException(
+                    (pullResult.exceptionOrNull()?.message ?: "Pull failed.") +
+                        " Push was not retried.",
+                ),
+            )
+        }
+        onProgress("Retrying push…")
+        return gitPushService.push(request, onProgress)
+    }
 
     private suspend fun openOrSelectRelativePath(path: String, displayNameFallback: String) {
         val existing = _tabs.value.indexOfFirst { it.path == path }

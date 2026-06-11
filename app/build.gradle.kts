@@ -23,6 +23,21 @@ val geminiKey: String =
         ?: localProps.getProperty("geminiApiKey")
         ?: ""
 
+val openAiKey: String =
+    (project.findProperty("openAiApiKey") as String?)
+        ?: localProps.getProperty("openAiApiKey")
+        ?: ""
+
+val grokKey: String =
+    (project.findProperty("grokApiKey") as String?)
+        ?: localProps.getProperty("grokApiKey")
+        ?: ""
+
+val openRouterKey: String =
+    (project.findProperty("openrouterApiKey") as String?)
+        ?: localProps.getProperty("openrouterApiKey")
+        ?: ""
+
 android {
     namespace = "com.tabletaide.ide"
     compileSdk = 35
@@ -35,6 +50,9 @@ android {
         versionName = "0.1.0"
         buildConfigField("String", "ANTHROPIC_API_KEY", "\"${anthropicKey.replace("\"", "\\\"")}\"")
         buildConfigField("String", "GEMINI_API_KEY", "\"${geminiKey.replace("\"", "\\\"")}\"")
+        buildConfigField("String", "OPENAI_API_KEY", "\"${openAiKey.replace("\"", "\\\"")}\"")
+        buildConfigField("String", "GROK_API_KEY", "\"${grokKey.replace("\"", "\\\"")}\"")
+        buildConfigField("String", "OPENROUTER_API_KEY", "\"${openRouterKey.replace("\"", "\\\"")}\"")
     }
 
     buildTypes {

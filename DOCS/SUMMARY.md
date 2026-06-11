@@ -2,6 +2,13 @@
 
 # Kinetic — Project summary
 
+## Snapshot — 2026-06-11 (P0 code-complete)
+
+- **Shipped:** Multi-provider LLM (Claude/Gemini/OpenAI/Grok/OpenRouter), model picker, git auth, pull+push recovery, Gemini/OpenAI tool codecs, capability onboarding.
+- **Build/tests:** `:app:testDebugUnitTest` includes tool round-trip + git push-failure detection tests.
+- **Docs:** [`MVP_CHECKLIST.md`](./MVP_CHECKLIST.md) — code P0 done; 👤 **USER** device QA remains.
+- **Next 👤 USER:** Run 15-min manual QA on tablet/emulator; log device in SCRATCHPAD.
+
 ## Snapshot — 2026-05-14
 
 - **Build:** `:app:compileDebugKotlin` verified locally after capability-banner polish; current toolchain
@@ -43,6 +50,7 @@
 | [SCRATCHPAD.md](./SCRATCHPAD.md) | Active tasks, blockers, recent actions |
 | [SBOM.md](./SBOM.md) | Dependencies and supply-chain notes |
 | [ROADMAP.md](./ROADMAP.md) | Granular Android AI IDE execution roadmap |
+| [MVP_CHECKLIST.md](./MVP_CHECKLIST.md) | Fast path to shippable MVP — blockers, QA script, done criteria |
 | [STYLE_GUIDE.md](./STYLE_GUIDE.md) | Conventions for this repo |
 | [My_Thoughts.md](./My_Thoughts.md) | Decisions and rationale |
 | [CHANGELOG.md](./CHANGELOG.md) | Version history |
