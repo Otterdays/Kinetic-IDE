@@ -20,8 +20,8 @@ class LlmModelFetchService @Inject constructor(
             }
             when (provider) {
                 LlmProvider.OPENROUTER -> fetchOpenRouterModels(apiKey)
+                LlmProvider.GEMINI -> fetchGeminiModels(apiKey)
                 LlmProvider.ANTHROPIC,
-                LlmProvider.GEMINI,
                 LlmProvider.OPENAI,
                 LlmProvider.GROK,
                 -> Result.success(emptyList())
@@ -50,5 +50,47 @@ class LlmModelFetchService @Inject constructor(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    private fun fetchGeminiModels(apiKey: String): Result<List<LlmModelOption>> {
+        val collected = mutableListOf<LlmModelOption>()
+        var pageToken: String? = null
+        var pages = 0
+        return try {
+            while (pages < MAX_GEMINI_PAGES) {
+                val urlBuilder = StringBuilder(
+                    "https://generativelanguage.googleapis.com/v1beta/models" +
+                        "?key=$apiKey&pageSize=$GEMINI_PAGE_SIZE",
+                )
+                if (!pageToken.isNullOrBlank()) {
+                    urlBuilder.append("&pageToken=").append(pageToken)
+                }
+                val request = Request.Builder()
+                    .url(urlBuilder.toString())
+                    .get()
+                    .build()
+                httpClient.newCall(request).execute().use { response ->
+                    val body = response.body?.string().orEmpty()
+                    if (!response.isSuccessful) {
+                        return Result.failure(
+                            IllegalStateException("Gemini models HTTP ${response.code}: $body"),
+                        )
+                    }
+                    val page = GeminiModelParser.parsePage(body)
+                    collected += page.models
+                    pageToken = page.nextPageToken
+                }
+                pages++
+                if (pageToken.isNullOrBlank()) break
+            }
+            Result.success(GeminiModelParser.sortForPicker(collected.distinctBy { it.id }))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    companion object {
+        private const val GEMINI_PAGE_SIZE = 100
+        private const val MAX_GEMINI_PAGES = 10
     }
 }

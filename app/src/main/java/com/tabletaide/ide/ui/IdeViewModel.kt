@@ -19,7 +19,6 @@ import com.tabletaide.ide.data.GitHubOAuthService
 import com.tabletaide.ide.data.GitHubOAuthUiState
 import com.tabletaide.ide.data.GitHubRepo
 import com.tabletaide.ide.data.GitHubRepoListState
-import com.tabletaide.ide.data.GitHubSessionState
 import com.tabletaide.ide.data.GitCommitDialogState
 import com.tabletaide.ide.data.GitCommitRequest
 import com.tabletaide.ide.data.GitCommitService

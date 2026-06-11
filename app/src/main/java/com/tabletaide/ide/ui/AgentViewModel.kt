@@ -20,6 +20,7 @@ import com.tabletaide.ide.data.CommandPreview
 import com.tabletaide.ide.data.CommandRiskClassifier
 import com.tabletaide.ide.data.CommandSnapshotDiff
 import com.tabletaide.ide.data.LlmCredentialState
+import com.tabletaide.ide.data.GeminiModelParser
 import com.tabletaide.ide.data.LlmModelCatalog
 import com.tabletaide.ide.data.LlmModelFetchService
 import com.tabletaide.ide.data.LlmProvider
@@ -162,8 +163,14 @@ class AgentViewModel @Inject constructor(
         val current = _selection.value
         if (current.hasModel) return
         if (!_credentials.value.hasKey(current.provider)) return
-        val first = _modelPickerState.value.models.firstOrNull { it.provider == current.provider } ?: return
-        setSelection(first.provider, first.id)
+        val providerModels = _modelPickerState.value.models.filter { it.provider == current.provider }
+        if (providerModels.isEmpty()) return
+        val preferredId = when (current.provider) {
+            LlmProvider.GEMINI -> GeminiModelParser.preferredDefaultModelId(providerModels)
+            else -> providerModels.first().id
+        } ?: return
+        val match = providerModels.find { it.id == preferredId } ?: providerModels.first()
+        setSelection(match.provider, match.id)
     }
 
     fun loadAuditEntries() {

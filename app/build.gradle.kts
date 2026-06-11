@@ -58,6 +58,11 @@ android {
         buildConfigField("String", "OPENAI_API_KEY", "\"${openAiKey.replace("\"", "\\\"")}\"")
         buildConfigField("String", "GROK_API_KEY", "\"${grokKey.replace("\"", "\\\"")}\"")
         buildConfigField("String", "OPENROUTER_API_KEY", "\"${openRouterKey.replace("\"", "\\\"")}\"")
+        buildConfigField(
+            "String",
+            "GITHUB_OAUTH_CLIENT_ID",
+            "\"${githubOAuthClientId.replace("\"", "\\\"")}\"",
+        )
     }
 
     buildTypes {
@@ -99,6 +104,7 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.documentfile:documentfile:1.1.0")
+    implementation("androidx.browser:browser:1.8.0")
 
     implementation("com.google.dagger:hilt-android:2.59.2")
     ksp("com.google.dagger:hilt-compiler:2.59.2")

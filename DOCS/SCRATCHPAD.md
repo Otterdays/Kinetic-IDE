@@ -11,6 +11,12 @@
 5. `Ctrl+P` → **Commit and push** → generate message → **Commit & push** → confirm on github.com.
 6. 👤 **USER:** Log device model + Android version here after first successful run: `_______________`
 
+## Session checkpoint — 2026-06-11 (GitHub OAuth clone)
+
+- **Done:** GitHub OAuth (PKCE) + repo list in **Clone repository → GitHub** tab; clone + `openWorkspaceRoot` unchanged.
+- **Setup:** GitHub OAuth App callback `com.tabletaide.ide://oauth/github`; `githubOAuthClientId` in `local.properties`.
+- **Verify:** `.\gradlew.bat :app:assembleDebug :app:testDebugUnitTest` **BUILD SUCCESSFUL** (`GitHubApiParserTest`).
+
 ## Session checkpoint — 2026-06-11 (P0 code-complete)
 
 - **Done:** `GitPullService` + **Pull** in commit dialog; auto pull+retry on non-fast-forward push.
