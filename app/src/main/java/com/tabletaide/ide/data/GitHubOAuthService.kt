@@ -1,23 +1,28 @@
 package com.tabletaide.ide.data
 
+import android.content.Context
 import android.net.Uri
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class GitHubOAuthService @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val httpClient: OkHttpClient,
     private val gitAuthStore: GitAuthStore,
     private val sessionStore: GitHubSessionStore,
     private val oauthSettings: GitHubOAuthSettingsStore,
 ) {
+    private val pendingPrefs get() =
+        context.getSharedPreferences(PENDING_PREFS, Context.MODE_PRIVATE)
+
     @Volatile
     private var pendingVerifier: String? = null
 
@@ -35,8 +40,7 @@ class GitHubOAuthService @Inject constructor(
         val verifier = GitHubPkce.generateVerifier()
         val state = GitHubPkce.generateState()
         val challenge = GitHubPkce.challengeForVerifier(verifier)
-        pendingVerifier = verifier
-        pendingState = state
+        storePendingAuthorization(verifier, state)
         val uri = Uri.parse("https://github.com/login/oauth/authorize").buildUpon()
             .appendQueryParameter("client_id", oauthSettings.getClientId())
             .appendQueryParameter("redirect_uri", GitHubOAuthConfig.REDIRECT_URI)
@@ -63,10 +67,9 @@ class GitHubOAuthService @Inject constructor(
         }
         val code = callbackUri.getQueryParameter("code")?.trim().orEmpty()
         val state = callbackUri.getQueryParameter("state")?.trim().orEmpty()
-        val expectedState = pendingState
-        val verifier = pendingVerifier
-        pendingState = null
-        pendingVerifier = null
+        val expectedState = pendingState ?: loadPendingState()
+        val verifier = pendingVerifier ?: loadPendingVerifier()
+        clearPendingAuthorization()
         if (code.isEmpty()) {
             return@withContext Result.failure(IllegalStateException("GitHub OAuth callback missing code."))
         }
@@ -94,21 +97,58 @@ class GitHubOAuthService @Inject constructor(
     fun signOut() {
         gitAuthStore.clear(GitHubOAuthConfig.HOST)
         sessionStore.clear()
+        clearPendingAuthorization()
+    }
+
+    fun cancelPendingAuthorization() {
+        clearPendingAuthorization()
+    }
+
+    private fun storePendingAuthorization(verifier: String, state: String) {
+        pendingVerifier = verifier
+        pendingState = state
+        pendingPrefs.edit()
+            .putString(KEY_PENDING_VERIFIER, verifier)
+            .putString(KEY_PENDING_STATE, state)
+            .apply()
+    }
+
+    private fun loadPendingVerifier(): String? =
+        pendingPrefs.getString(KEY_PENDING_VERIFIER, null)?.trim()?.takeIf { it.isNotEmpty() }
+
+    private fun loadPendingState(): String? =
+        pendingPrefs.getString(KEY_PENDING_STATE, null)?.trim()?.takeIf { it.isNotEmpty() }
+
+    private fun clearPendingAuthorization() {
         pendingState = null
         pendingVerifier = null
+        pendingPrefs.edit()
+            .remove(KEY_PENDING_VERIFIER)
+            .remove(KEY_PENDING_STATE)
+            .apply()
+    }
+
+    companion object {
+        private const val PENDING_PREFS = "kinetic_github_oauth_pending"
+        private const val KEY_PENDING_VERIFIER = "verifier"
+        private const val KEY_PENDING_STATE = "state"
     }
 
     private fun exchangeCodeForToken(code: String, verifier: String): Result<String> {
-        val body = JSONObject()
-            .put("client_id", oauthSettings.getClientId())
-            .put("redirect_uri", GitHubOAuthConfig.REDIRECT_URI)
-            .put("code", code)
-            .put("code_verifier", verifier)
-            .toString()
+        val clientId = oauthSettings.getClientId()
+        if (clientId.isBlank()) {
+            return Result.failure(IllegalStateException("GitHub OAuth client ID is not configured."))
+        }
+        val body = FormBody.Builder()
+            .add("client_id", clientId)
+            .add("redirect_uri", GitHubOAuthConfig.REDIRECT_URI)
+            .add("code", code)
+            .add("code_verifier", verifier)
+            .build()
         val request = Request.Builder()
             .url("https://github.com/login/oauth/access_token")
             .addHeader("Accept", "application/json")
-            .post(body.toRequestBody("application/json".toMediaType()))
+            .post(body)
             .build()
         return try {
             httpClient.newCall(request).execute().use { response ->
@@ -122,7 +162,13 @@ class GitHubOAuthService @Inject constructor(
                 val error = json.optString("error").trim()
                 if (error.isNotEmpty()) {
                     val description = json.optString("error_description", error)
-                    return Result.failure(IllegalStateException(description))
+                    val message = if (description.contains("client_id", ignoreCase = true)) {
+                        "$description Check GitHub → Settings → Developer settings → OAuth Apps " +
+                            "(not GitHub Apps) and confirm the Client ID matches this build."
+                    } else {
+                        description
+                    }
+                    return Result.failure(IllegalStateException(message))
                 }
                 val token = json.optString("access_token").trim()
                 if (token.isEmpty()) {

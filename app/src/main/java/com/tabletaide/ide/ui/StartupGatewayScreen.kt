@@ -1,9 +1,12 @@
 package com.tabletaide.ide.ui
 
+import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.text.format.DateUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -53,7 +56,7 @@ import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.browser.customtabs.CustomTabsIntent
+import com.tabletaide.ide.GitHubOAuthActivity
 import com.tabletaide.ide.data.GitHubOAuthUiState
 import com.tabletaide.ide.data.GitHubRepo
 import com.tabletaide.ide.data.GitSavedAuthState
@@ -76,6 +79,8 @@ fun StartupGatewayScreen(
     onCreateStarterProject: (Uri, String, StarterProjectTemplate) -> Unit,
     onCloneRepository: (Uri, String, String, String, Boolean, Boolean) -> Unit,
     onBeginGitHubSignIn: () -> Uri?,
+    onCompleteGitHubSignIn: (Uri) -> Unit,
+    onCancelGitHubSignIn: () -> Unit,
     onGitHubSignOut: () -> Unit,
     onLoadGitHubRepos: () -> Unit,
     onCloneGitHubRepository: (Uri, GitHubRepo) -> Unit,
@@ -103,6 +108,22 @@ fun StartupGatewayScreen(
     val pickCloneDestination = rememberWorkspaceTreePicker { treeUri ->
         cloneDestinationUri = treeUri
         cloneDestinationLabel = DocumentFile.fromTreeUri(context, treeUri)?.name ?: "Selected folder"
+    }
+
+    val githubOAuthLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        when (result.resultCode) {
+            Activity.RESULT_OK -> {
+                val callbackUri = result.data?.data
+                if (callbackUri != null) {
+                    onCompleteGitHubSignIn(callbackUri)
+                } else {
+                    onCancelGitHubSignIn()
+                }
+            }
+            else -> onCancelGitHubSignIn()
+        }
     }
 
     LaunchedEffect(statusMessage) {
@@ -165,7 +186,9 @@ fun StartupGatewayScreen(
             onClearSavedAuth = onClearSavedGitAuth,
             onGitHubSignIn = {
                 val authUri = onBeginGitHubSignIn() ?: return@CloneRepositoryDialog
-                CustomTabsIntent.Builder().build().launchUrl(context, authUri)
+                githubOAuthLauncher.launch(
+                    GitHubOAuthActivity.createIntent(context, authUri.toString()),
+                )
             },
             onGitHubSignOut = onGitHubSignOut,
             onLoadGitHubRepos = onLoadGitHubRepos,

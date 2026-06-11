@@ -13,9 +13,10 @@ class GitHubOAuthSettingsStore @Inject constructor(
     private val prefs get() = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     fun getClientId(): String {
-        val stored = prefs.getString(KEY_CLIENT_ID, "").orEmpty().trim()
-        if (stored.isNotBlank()) return stored
-        return BuildConfig.GITHUB_OAUTH_CLIENT_ID.trim()
+        // Build-time ID wins so a stale in-app save cannot override a rebuilt APK.
+        val fromBuild = BuildConfig.GITHUB_OAUTH_CLIENT_ID.trim()
+        if (fromBuild.isNotBlank()) return fromBuild
+        return prefs.getString(KEY_CLIENT_ID, "").orEmpty().trim()
     }
 
     fun setClientId(clientId: String) {

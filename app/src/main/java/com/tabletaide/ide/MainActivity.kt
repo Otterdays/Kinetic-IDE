@@ -6,15 +6,14 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.hilt.navigation.compose.hiltViewModel
 import com.tabletaide.ide.data.GitHubOAuthConfig
 import com.tabletaide.ide.ui.AppLaunchSurface
 import com.tabletaide.ide.ui.IdeViewModel
@@ -25,25 +24,19 @@ import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    private var oauthCallbackHandler: ((Uri) -> Unit)? = null
+    private val ideVm: IdeViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        dispatchOAuthIntent(intent)
         setContent {
-            val ideVm: IdeViewModel = hiltViewModel()
             val themeMode by ideVm.themeMode.collectAsState()
             val appLaunchSurface by ideVm.appLaunchSurface.collectAsState()
             val recentWorkspaces by ideVm.recentWorkspaces.collectAsState()
             val status by ideVm.status.collectAsState()
             val cloneUiState by ideVm.cloneUiState.collectAsState()
             val githubOAuthState by ideVm.githubOAuthState.collectAsState()
-
-            DisposableEffect(Unit) {
-                oauthCallbackHandler = { uri -> ideVm.completeGitHubSignIn(uri) }
-                dispatchOAuthIntent(intent)
-                onDispose { oauthCallbackHandler = null }
-            }
 
             KineticTheme(mode = themeMode) {
                 Surface(
@@ -66,6 +59,8 @@ class MainActivity : ComponentActivity() {
                             onCreateStarterProject = ideVm::createStarterProject,
                             onCloneRepository = ideVm::cloneRepository,
                             onBeginGitHubSignIn = ideVm::beginGitHubSignIn,
+                            onCompleteGitHubSignIn = ideVm::completeGitHubSignIn,
+                            onCancelGitHubSignIn = ideVm::cancelGitHubSignIn,
                             onGitHubSignOut = ideVm::signOutGitHub,
                             onLoadGitHubRepos = ideVm::loadGitHubRepos,
                             onCloneGitHubRepository = ideVm::cloneGitHubRepository,
@@ -86,12 +81,12 @@ class MainActivity : ComponentActivity() {
 
     private fun dispatchOAuthIntent(intent: Intent?) {
         val uri = intent?.data ?: return
-        if (uri.scheme != GitHubOAuthConfig.REDIRECT_SCHEME ||
-            uri.host != GitHubOAuthConfig.REDIRECT_HOST
-        ) {
-            return
-        }
-        oauthCallbackHandler?.invoke(uri)
+        if (!isOAuthCallback(uri)) return
+        ideVm.completeGitHubSignIn(uri)
         intent.data = null
     }
+
+    private fun isOAuthCallback(uri: Uri): Boolean =
+        uri.scheme == GitHubOAuthConfig.REDIRECT_SCHEME &&
+            uri.host == GitHubOAuthConfig.REDIRECT_HOST
 }

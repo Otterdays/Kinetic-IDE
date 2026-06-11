@@ -702,6 +702,11 @@ class IdeViewModel @Inject constructor(
         )
     }
 
+    fun cancelGitHubSignIn() {
+        githubOAuthService.cancelPendingAuthorization()
+        _githubOAuthState.value = refreshGitHubOAuthState().copy(authorizing = false)
+    }
+
     fun completeGitHubSignIn(callbackUri: Uri) {
         viewModelScope.launch {
             _githubOAuthState.update { it.copy(authorizing = true, errorMessage = null) }
