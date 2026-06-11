@@ -38,8 +38,10 @@ fun GitHubCloneSection(
     onLoadRepos: () -> Unit,
     onPickDestination: () -> Unit,
     onCloneRepo: (GitHubRepo) -> Unit,
+    onSaveOAuthClientId: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var oauthClientIdDraft by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf("") }
     var selectedRepo by remember { mutableStateOf<GitHubRepo?>(null) }
     val session = oauthState.session
@@ -72,11 +74,42 @@ fun GitHubCloneSection(
         )
         if (!oauthState.oauthConfigured) {
             Text(
-                text = "GitHub OAuth is not configured. Add githubOAuthClientId to local.properties and register callback $GITHUB_CALLBACK_HINT in your GitHub OAuth app.",
-                color = MaterialTheme.colorScheme.error,
+                text = "Create a GitHub OAuth App at github.com/settings/developers. Set the callback URL to:",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 10.dp),
             )
+            Text(
+                text = GITHUB_CALLBACK_HINT,
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            OutlinedTextField(
+                value = oauthClientIdDraft,
+                onValueChange = { oauthClientIdDraft = it },
+                label = { Text("OAuth App Client ID") },
+                placeholder = { Text("Ov23li…") },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp),
+            )
+            TextButton(
+                onClick = { onSaveOAuthClientId(oauthClientIdDraft) },
+                enabled = oauthClientIdDraft.trim().isNotEmpty(),
+                modifier = Modifier.padding(top = 4.dp),
+            ) {
+                Text("Save Client ID")
+            }
+            oauthState.errorMessage?.let { message ->
+                Text(
+                    text = message,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
             return@Column
         }
         if (!hasAllFilesAccess) {

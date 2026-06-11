@@ -79,6 +79,7 @@ fun StartupGatewayScreen(
     onGitHubSignOut: () -> Unit,
     onLoadGitHubRepos: () -> Unit,
     onCloneGitHubRepository: (Uri, GitHubRepo) -> Unit,
+    onSaveGitHubOAuthClientId: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -172,6 +173,7 @@ fun StartupGatewayScreen(
                 val targetUri = cloneDestinationUri ?: return@CloneRepositoryDialog
                 onCloneGitHubRepository(targetUri, repo)
             },
+            onSaveGitHubOAuthClientId = onSaveGitHubOAuthClientId,
             onDismiss = {
                 showCloneDialog = false
                 cloneDestinationUri = null

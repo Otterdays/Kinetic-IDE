@@ -16,6 +16,7 @@ class GitHubOAuthService @Inject constructor(
     private val httpClient: OkHttpClient,
     private val gitAuthStore: GitAuthStore,
     private val sessionStore: GitHubSessionStore,
+    private val oauthSettings: GitHubOAuthSettingsStore,
 ) {
     @Volatile
     private var pendingVerifier: String? = null
@@ -24,10 +25,10 @@ class GitHubOAuthService @Inject constructor(
     private var pendingState: String? = null
 
     fun beginAuthorization(): Result<Uri> {
-        if (!GitHubOAuthConfig.isConfigured()) {
+        if (!oauthSettings.isConfigured()) {
             return Result.failure(
                 IllegalStateException(
-                    "GitHub OAuth is not configured. Add githubOAuthClientId to local.properties.",
+                    "GitHub OAuth client ID is not set. Paste your OAuth App Client ID below.",
                 ),
             )
         }
@@ -37,7 +38,7 @@ class GitHubOAuthService @Inject constructor(
         pendingVerifier = verifier
         pendingState = state
         val uri = Uri.parse("https://github.com/login/oauth/authorize").buildUpon()
-            .appendQueryParameter("client_id", GitHubOAuthConfig.clientId)
+            .appendQueryParameter("client_id", oauthSettings.getClientId())
             .appendQueryParameter("redirect_uri", GitHubOAuthConfig.REDIRECT_URI)
             .appendQueryParameter("scope", GitHubOAuthConfig.SCOPE)
             .appendQueryParameter("state", state)
@@ -99,7 +100,7 @@ class GitHubOAuthService @Inject constructor(
 
     private fun exchangeCodeForToken(code: String, verifier: String): Result<String> {
         val body = JSONObject()
-            .put("client_id", GitHubOAuthConfig.clientId)
+            .put("client_id", oauthSettings.getClientId())
             .put("redirect_uri", GitHubOAuthConfig.REDIRECT_URI)
             .put("code", code)
             .put("code_verifier", verifier)

@@ -49,6 +49,7 @@ fun CloneRepositoryDialog(
     onGitHubSignOut: () -> Unit,
     onLoadGitHubRepos: () -> Unit,
     onCloneGitHubRepo: (GitHubRepo) -> Unit,
+    onSaveGitHubOAuthClientId: (String) -> Unit,
     onDismiss: () -> Unit,
     onClone: (repoUrl: String, username: String, token: String, useSavedToken: Boolean, saveToken: Boolean) -> Unit,
 ) {
@@ -119,6 +120,7 @@ fun CloneRepositoryDialog(
                             onLoadRepos = onLoadGitHubRepos,
                             onPickDestination = onPickDestination,
                             onCloneRepo = onCloneGitHubRepo,
+                            onSaveOAuthClientId = onSaveGitHubOAuthClientId,
                             modifier = Modifier.padding(top = 10.dp),
                         )
                         if (!cloneUiState.errorMessage.isNullOrBlank()) {

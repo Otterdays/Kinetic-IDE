@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kinetic IDE</title>
+  <meta name="description" content="Tablet-first Android IDE with an AI agent loop." />
+  <style>
+    :root {
+      --bg: #060e20;
+      --surface: #0f1930;
+      --primary: #81ecff;
+      --secondary: #c3f400;
+      --text: #dee5ff;
+      --muted: #a3aac4;
+      --outline: #40485d;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: radial-gradient(ellipse 120% 80% at 50% -20%, #141f38 0%, var(--bg) 55%);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    main {
+      max-width: 42rem;
+      margin: 0 auto;
+      padding: 3rem 1.5rem 4rem;
+    }
+
+    .badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--secondary);
+      margin-bottom: 0.75rem;
+    }
+
+    h1 {
+      margin: 0 0 0.5rem;
+      font-size: clamp(2rem, 6vw, 2.75rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    h1 span { color: var(--primary); }
+
+    .tagline {
+      margin: 0 0 2rem;
+      font-size: 1.125rem;
+      color: var(--muted);
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--outline);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card h2 {
+      margin: 0 0 0.75rem;
+      font-size: 1rem;
+      color: var(--primary);
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 1.25rem;
+      color: var(--muted);
+    }
+
+    li + li { margin-top: 0.35rem; }
+
+    .links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 2rem;
+    }
+
+    a.button {
+      display: inline-block;
+      padding: 0.65rem 1.1rem;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    a.primary {
+      background: var(--primary);
+      color: #003840;
+    }
+
+    a.secondary {
+      border: 1px solid var(--outline);
+      color: var(--text);
+    }
+
+    footer {
+      margin-top: 2.5rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="badge">Tablet-first Android IDE</p>
+    <h1><span>Kinetic</span> IDE</h1>
+    <p class="tagline">
+      Code on your tablet with a split editor, git workflows, and an AI agent that can read and edit your project.
+    </p>
+
+    <div class="card">
+      <h2>What it does</h2>
+      <ul>
+        <li>Open workspaces from device storage or clone from GitHub</li>
+        <li>Multi-tab editor with autosave and syntax highlighting</li>
+        <li>AI chat with tool use — list, read, write, and edit files</li>
+        <li>Git status, commit, and push over HTTPS</li>
+      </ul>
+    </div>
+
+    <div class="links">
+      <a class="button primary" href="https://github.com/Otterdays/Kinetic-IDE">View on GitHub</a>
+      <a class="button secondary" href="https://github.com/Otterdays/Kinetic-IDE#quick-start">Build instructions</a>
+    </div>
+
+    <footer>
+      Official homepage for the Kinetic IDE Android app and GitHub OAuth registration.
+    </footer>
+  </main>
+</body>
+</html>

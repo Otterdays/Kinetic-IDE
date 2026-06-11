@@ -69,6 +69,7 @@ class MainActivity : ComponentActivity() {
                             onGitHubSignOut = ideVm::signOutGitHub,
                             onLoadGitHubRepos = ideVm::loadGitHubRepos,
                             onCloneGitHubRepository = ideVm::cloneGitHubRepository,
+                            onSaveGitHubOAuthClientId = ideVm::setGitHubOAuthClientId,
                         )
                         AppLaunchSurface.IDE_SHELL -> TabletIdeScreen(ideVm = ideVm)
                     }

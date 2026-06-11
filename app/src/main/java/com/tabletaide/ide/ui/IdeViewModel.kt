@@ -14,8 +14,8 @@ import com.tabletaide.ide.data.ExplorerPinsStore
 import com.tabletaide.ide.data.GitAuthDialogState
 import com.tabletaide.ide.data.GitAuthEntry
 import com.tabletaide.ide.data.GitHubApiClient
-import com.tabletaide.ide.data.GitHubOAuthConfig
 import com.tabletaide.ide.data.GitHubOAuthService
+import com.tabletaide.ide.data.GitHubOAuthSettingsStore
 import com.tabletaide.ide.data.GitHubOAuthUiState
 import com.tabletaide.ide.data.GitHubRepo
 import com.tabletaide.ide.data.GitHubRepoListState
@@ -99,6 +99,7 @@ class IdeViewModel @Inject constructor(
     private val recentWorkspacesStore: RecentWorkspacesStore,
     private val gitAuthStore: GitAuthStore,
     private val githubOAuthService: GitHubOAuthService,
+    private val githubOAuthSettings: GitHubOAuthSettingsStore,
     private val githubApiClient: GitHubApiClient,
     private val cloneTargetResolver: CloneTargetResolver,
     private val gitCloneService: GitCloneService,
@@ -666,10 +667,22 @@ class IdeViewModel @Inject constructor(
         _cloneUiState.value = GitCloneUiState()
     }
 
-    fun beginGitHubSignIn(): android.net.Uri? {
-        if (!GitHubOAuthConfig.isConfigured()) {
+    fun setGitHubOAuthClientId(clientId: String) {
+        val trimmed = clientId.trim()
+        if (trimmed.isEmpty()) {
             _githubOAuthState.update {
-                it.copy(errorMessage = "Add githubOAuthClientId to local.properties and rebuild.")
+                it.copy(errorMessage = "Enter your GitHub OAuth App Client ID.")
+            }
+            return
+        }
+        githubOAuthSettings.setClientId(trimmed)
+        _githubOAuthState.value = refreshGitHubOAuthState()
+    }
+
+    fun beginGitHubSignIn(): android.net.Uri? {
+        if (!githubOAuthSettings.isConfigured()) {
+            _githubOAuthState.update {
+                it.copy(errorMessage = "Save your GitHub OAuth App Client ID first.")
             }
             return null
         }
@@ -765,7 +778,7 @@ class IdeViewModel @Inject constructor(
 
     private fun refreshGitHubOAuthState(): GitHubOAuthUiState {
         return GitHubOAuthUiState(
-            oauthConfigured = GitHubOAuthConfig.isConfigured(),
+            oauthConfigured = githubOAuthSettings.isConfigured(),
             session = githubOAuthService.currentSession(),
         )
     }
