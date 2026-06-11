@@ -29,6 +29,8 @@ import com.tabletaide.ide.data.LlmModelCatalog
 import com.tabletaide.ide.data.LlmModelOption
 import com.tabletaide.ide.data.LlmProvider
 import com.tabletaide.ide.data.ModelPickerUiState
+import com.tabletaide.ide.data.ProviderModelSection
+import com.tabletaide.ide.data.ProviderModelStatus
 
 @Composable
 fun ModelPickerDialog(
@@ -67,7 +69,7 @@ fun ModelPickerDialog(
                     singleLine = true,
                 )
                 Text(
-                    text = "Models load live from providers when possible. Others show Coming soon.",
+                    text = "Gemini and OpenRouter load live. Other providers need a manual model ID later.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
@@ -95,17 +97,19 @@ fun ModelPickerDialog(
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     LlmProvider.entries.forEach { provider ->
+                        val section = pickerState.sectionFor(provider)
                         val hasKey = credentials.hasKey(provider)
                         val providerModels = filtered.filter { it.provider == provider }
                         item(key = "header-${provider.id}") {
                             ProviderSectionHeader(
                                 provider = provider,
                                 hasKey = hasKey,
+                                section = section,
                             )
                         }
-                        when {
-                            !hasKey -> Unit
-                            pickerState.loading -> {
+                        when (section.status) {
+                            ProviderModelStatus.NoKey -> Unit
+                            ProviderModelStatus.Loading -> {
                                 item(key = "loading-${provider.id}") {
                                     Text(
                                         text = "Loading…",
@@ -115,44 +119,64 @@ fun ModelPickerDialog(
                                     )
                                 }
                             }
-                            providerModels.isEmpty() -> {
-                                item(key = "soon-${provider.id}") {
+                            ProviderModelStatus.NotListed -> {
+                                item(key = "notlisted-${provider.id}") {
                                     Text(
-                                        text = "Coming soon",
+                                        text = "Model list not available yet",
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         style = MaterialTheme.typography.bodyMedium,
                                         modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
                                     )
                                 }
                             }
-                            else -> {
-                                items(providerModels, key = { it.id }) { option ->
-                                    ModelPickerRow(
-                                        option = option,
-                                        selected = option.provider == currentProvider &&
-                                            option.id == currentModelId,
-                                        enabled = true,
-                                        onClick = {
-                                            onSelect(option.provider, option.id)
-                                            onDismiss()
-                                        },
-                                    )
+                            ProviderModelStatus.Failed -> {
+                                item(key = "failed-${provider.id}") {
+                                    Column(modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp)) {
+                                        Text(
+                                            text = section.errorMessage ?: "Could not load models.",
+                                            color = MaterialTheme.colorScheme.error,
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                        TextButton(onClick = onLoadModels) {
+                                            Text("Retry")
+                                        }
+                                    }
                                 }
                             }
-                        }
-                    }
-                    if (
-                        !pickerState.loading &&
-                        pickerState.loaded &&
-                        filtered.isEmpty() &&
-                        filter.isNotBlank()
-                    ) {
-                        item(key = "empty-filter") {
-                            Text(
-                                text = "No models match \"$filter\".",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(vertical = 12.dp),
-                            )
+                            ProviderModelStatus.Ready -> {
+                                if (provider == LlmProvider.OPENROUTER) {
+                                    item(key = "or-note-${provider.id}") {
+                                        Text(
+                                            text = "Showing tool-capable models for agent use.",
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            modifier = Modifier.padding(bottom = 4.dp, start = 4.dp),
+                                        )
+                                    }
+                                }
+                                if (providerModels.isEmpty() && filter.isNotBlank()) {
+                                    item(key = "empty-filter-${provider.id}") {
+                                        Text(
+                                            text = "No models match \"$filter\".",
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
+                                        )
+                                    }
+                                } else {
+                                    items(providerModels, key = { it.id }) { option ->
+                                        ModelPickerRow(
+                                            option = option,
+                                            selected = option.provider == currentProvider &&
+                                                option.id == currentModelId,
+                                            enabled = true,
+                                            onClick = {
+                                                onSelect(option.provider, option.id)
+                                                onDismiss()
+                                            },
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -175,13 +199,17 @@ fun ModelPickerDialog(
 private fun ProviderSectionHeader(
     provider: LlmProvider,
     hasKey: Boolean,
+    section: ProviderModelSection,
 ) {
     Column(modifier = Modifier.padding(top = 10.dp, bottom = 4.dp)) {
         HorizontalDivider()
         Text(
             text = buildString {
                 append(provider.displayName)
-                if (!hasKey) append(" · needs API key")
+                when {
+                    !hasKey -> append(" · needs API key")
+                    section.status == ProviderModelStatus.NotListed -> append(" · list not wired")
+                }
             },
             style = MaterialTheme.typography.labelLarge,
             color = if (hasKey) {

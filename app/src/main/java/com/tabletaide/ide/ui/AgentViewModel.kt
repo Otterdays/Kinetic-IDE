@@ -22,6 +22,10 @@ import com.tabletaide.ide.data.CommandSnapshotDiff
 import com.tabletaide.ide.data.LlmCredentialState
 import com.tabletaide.ide.data.GeminiModelParser
 import com.tabletaide.ide.data.LlmModelCatalog
+import com.tabletaide.ide.data.LlmProviderResolution
+import com.tabletaide.ide.data.ModelCatalogBuilder
+import com.tabletaide.ide.data.ProviderModelSection
+import com.tabletaide.ide.data.ProviderModelStatus
 import com.tabletaide.ide.data.LlmModelFetchService
 import com.tabletaide.ide.data.LlmProvider
 import com.tabletaide.ide.data.LlmProviderStore
@@ -123,32 +127,56 @@ class AgentViewModel @Inject constructor(
         }
     }
 
-    fun loadModelCatalog(force: Boolean = false) {
+    fun loadModelCatalog(force: Boolean = false, preferredProvider: LlmProvider? = null) {
         if (_modelPickerState.value.loading) return
         if (_modelPickerState.value.loaded && !force) return
         viewModelScope.launch {
-            _modelPickerState.update { it.copy(loading = true, errorMessage = null) }
             val creds = _credentials.value
-            val allModels = mutableListOf<com.tabletaide.ide.data.LlmModelOption>()
-            var fetchError: String? = null
-            for (provider in LlmProvider.entries) {
-                if (!creds.hasKey(provider)) continue
-                modelFetchService.fetchForProvider(provider).fold(
-                    onSuccess = { allModels += it },
-                    onFailure = { error ->
-                        fetchError = error.message ?: "Failed to load models for ${provider.displayName}"
-                    },
-                )
+            _modelPickerState.value = ModelPickerUiState(
+                loading = true,
+                sections = ModelCatalogBuilder.initialSections(creds, loading = true),
+                loaded = false,
+            )
+            val sections = LlmProvider.entries.associateWith { provider ->
+                when {
+                    !creds.hasKey(provider) -> ProviderModelSection(
+                        provider = provider,
+                        status = ProviderModelStatus.NoKey,
+                    )
+                    provider == LlmProvider.GEMINI || provider == LlmProvider.OPENROUTER -> {
+                        ModelCatalogBuilder.sectionAfterFetch(
+                            provider = provider,
+                            hasKey = true,
+                            fetchResult = modelFetchService.fetchForProvider(provider),
+                        )
+                    }
+                    else -> ProviderModelSection(
+                        provider = provider,
+                        status = ProviderModelStatus.NotListed,
+                    )
+                }
             }
             _modelPickerState.value = ModelPickerUiState(
                 loading = false,
-                models = allModels,
+                sections = sections,
                 loaded = true,
-                errorMessage = fetchError,
             )
+            ensureUsableProvider(preferredProvider)
             refreshSelectionDisplayName()
             maybeAutoSelectFirstModel()
         }
+    }
+
+    private fun ensureUsableProvider(preferred: LlmProvider? = null) {
+        val creds = _credentials.value
+        val target = when {
+            preferred != null && creds.hasKey(preferred) -> preferred
+            else -> LlmProviderResolution.resolveUsableProvider(creds, _provider.value)
+        } ?: return
+        if (_provider.value == target && creds.hasKey(_provider.value)) return
+        providerStore.setProvider(target)
+        _provider.value = target
+        _selection.value = providerStore.getSelection()
     }
 
     private fun refreshSelectionDisplayName() {
@@ -167,7 +195,9 @@ class AgentViewModel @Inject constructor(
         if (providerModels.isEmpty()) return
         val preferredId = when (current.provider) {
             LlmProvider.GEMINI -> GeminiModelParser.preferredDefaultModelId(providerModels)
-            else -> providerModels.first().id
+            LlmProvider.OPENROUTER -> providerModels.firstOrNull { it.supportsTools }?.id
+                ?: providerModels.firstOrNull()?.id
+            else -> providerModels.firstOrNull()?.id
         } ?: return
         val match = providerModels.find { it.id == preferredId } ?: providerModels.first()
         setSelection(match.provider, match.id)
@@ -216,7 +246,8 @@ class AgentViewModel @Inject constructor(
         _credentials.value = providerStore.getCredentialState()
         _error.value = null
         _modelPickerState.value = ModelPickerUiState()
-        loadModelCatalog(force = true)
+        val preferred = provider.takeIf { apiKey.isNotBlank() }
+        loadModelCatalog(force = true, preferredProvider = preferred)
     }
 
     fun setTrustPolicyMode(
@@ -246,7 +277,7 @@ class AgentViewModel @Inject constructor(
             return
         }
         if (!_selection.value.hasModel) {
-            _error.value = "No model selected. Open the model picker — catalog may show Coming soon until loaded."
+            _error.value = "No model selected. Open the model picker and choose a model."
             return
         }
         _composerDraft.value = ""
@@ -262,7 +293,7 @@ class AgentViewModel @Inject constructor(
             return
         }
         if (!_selection.value.hasModel) {
-            _error.value = "No model selected. Open the model picker — catalog may show Coming soon until loaded."
+            _error.value = "No model selected. Open the model picker and choose a model."
             return
         }
         viewModelScope.launch {
@@ -299,7 +330,7 @@ class AgentViewModel @Inject constructor(
             return
         }
         if (!_selection.value.hasModel) {
-            _error.value = "No model selected. Open the model picker — catalog may show Coming soon until loaded."
+            _error.value = "No model selected. Open the model picker and choose a model."
             return
         }
         viewModelScope.launch {
@@ -407,7 +438,7 @@ class AgentViewModel @Inject constructor(
             val modelStartedAt = System.currentTimeMillis()
             if (model.isBlank()) {
                 streamError =
-                    "No model selected for ${activeProvider.displayName}. Pick a model or wait for Coming soon providers."
+                    "No model selected for ${activeProvider.displayName}. Open the model picker and choose a model."
             } else {
                 llmClientResolver.clientFor(activeProvider).streamMessage(
                     model = model,

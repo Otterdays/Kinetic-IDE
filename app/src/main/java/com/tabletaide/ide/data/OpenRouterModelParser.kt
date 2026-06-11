@@ -4,7 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 internal object OpenRouterModelParser {
-    fun parse(json: String): List<LlmModelOption> {
+    fun parse(json: String, includeNonToolModels: Boolean = false): List<LlmModelOption> {
         val root = JSONObject(json)
         val data = root.optJSONArray("data") ?: return emptyList()
         val models = mutableListOf<LlmModelOption>()
@@ -21,6 +21,7 @@ internal object OpenRouterModelParser {
                 .orEmpty()
             if (outputModalities.isNotEmpty() && "text" !in outputModalities) continue
             val supportsTools = "tools" in supported || "tool_choice" in supported
+            if (!includeNonToolModels && !supportsTools) continue
             models.add(
                 LlmModelOption(
                     id = id,

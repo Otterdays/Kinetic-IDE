@@ -47,7 +47,7 @@ data class LlmSelectionState(
         get() = when {
             !modelDisplayName.isNullOrBlank() -> modelDisplayName
             modelId.isNotBlank() -> modelId
-            else -> "Coming soon"
+            else -> "No model selected"
         }
 
     val hasModel: Boolean get() = modelId.isNotBlank()
