@@ -5,3 +5,5 @@ geminiApiKey=
 openAiApiKey=
 grokApiKey=
 openrouterApiKey=
+# GitHub OAuth App client ID (public). Register callback: com.tabletaide.ide://oauth/github
+githubOAuthClientId=

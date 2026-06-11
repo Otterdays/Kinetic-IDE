@@ -38,6 +38,11 @@ val openRouterKey: String =
         ?: localProps.getProperty("openrouterApiKey")
         ?: ""
 
+val githubOAuthClientId: String =
+    (project.findProperty("githubOAuthClientId") as String?)
+        ?: localProps.getProperty("githubOAuthClientId")
+        ?: ""
+
 android {
     namespace = "com.tabletaide.ide"
     compileSdk = 35

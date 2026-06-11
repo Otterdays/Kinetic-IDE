@@ -20,9 +20,12 @@ import com.tabletaide.ide.data.CommandPreview
 import com.tabletaide.ide.data.CommandRiskClassifier
 import com.tabletaide.ide.data.CommandSnapshotDiff
 import com.tabletaide.ide.data.LlmCredentialState
+import com.tabletaide.ide.data.LlmModelCatalog
+import com.tabletaide.ide.data.LlmModelFetchService
 import com.tabletaide.ide.data.LlmProvider
 import com.tabletaide.ide.data.LlmProviderStore
 import com.tabletaide.ide.data.LlmSelectionState
+import com.tabletaide.ide.data.ModelPickerUiState
 import com.tabletaide.ide.data.SnapshotConflict
 import com.tabletaide.ide.data.TelemetryEvent
 import com.tabletaide.ide.data.TelemetryEventType
@@ -52,6 +55,7 @@ class AgentViewModel @Inject constructor(
     private val toolRouter: ToolRouter,
     private val trustStore: AgentTrustStore,
     private val providerStore: LlmProviderStore,
+    private val modelFetchService: LlmModelFetchService,
     private val workspace: WorkspaceRepository,
     private val snapshotStore: WorkspaceSnapshotStore,
     private val auditStore: AgentAuditStore,
@@ -70,6 +74,9 @@ class AgentViewModel @Inject constructor(
 
     private val _credentials = MutableStateFlow(providerStore.getCredentialState())
     val credentials: StateFlow<LlmCredentialState> = _credentials.asStateFlow()
+
+    private val _modelPickerState = MutableStateFlow(ModelPickerUiState())
+    val modelPickerState: StateFlow<ModelPickerUiState> = _modelPickerState.asStateFlow()
 
     private val _lines = MutableStateFlow<List<ChatLine>>(emptyList())
     val lines: StateFlow<List<ChatLine>> = _lines.asStateFlow()
@@ -109,7 +116,54 @@ class AgentViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             refreshTelemetrySummary()
+            if (_credentials.value.hasAnyKey()) {
+                loadModelCatalog()
+            }
         }
+    }
+
+    fun loadModelCatalog(force: Boolean = false) {
+        if (_modelPickerState.value.loading) return
+        if (_modelPickerState.value.loaded && !force) return
+        viewModelScope.launch {
+            _modelPickerState.update { it.copy(loading = true, errorMessage = null) }
+            val creds = _credentials.value
+            val allModels = mutableListOf<com.tabletaide.ide.data.LlmModelOption>()
+            var fetchError: String? = null
+            for (provider in LlmProvider.entries) {
+                if (!creds.hasKey(provider)) continue
+                modelFetchService.fetchForProvider(provider).fold(
+                    onSuccess = { allModels += it },
+                    onFailure = { error ->
+                        fetchError = error.message ?: "Failed to load models for ${provider.displayName}"
+                    },
+                )
+            }
+            _modelPickerState.value = ModelPickerUiState(
+                loading = false,
+                models = allModels,
+                loaded = true,
+                errorMessage = fetchError,
+            )
+            refreshSelectionDisplayName()
+            maybeAutoSelectFirstModel()
+        }
+    }
+
+    private fun refreshSelectionDisplayName() {
+        val current = _selection.value
+        val displayName = LlmModelCatalog.displayNameFor(_modelPickerState.value.models, current.modelId)
+        if (displayName != null && displayName != current.modelDisplayName) {
+            _selection.value = current.copy(modelDisplayName = displayName)
+        }
+    }
+
+    private fun maybeAutoSelectFirstModel() {
+        val current = _selection.value
+        if (current.hasModel) return
+        if (!_credentials.value.hasKey(current.provider)) return
+        val first = _modelPickerState.value.models.firstOrNull { it.provider == current.provider } ?: return
+        setSelection(first.provider, first.id)
     }
 
     fun loadAuditEntries() {
@@ -141,7 +195,12 @@ class AgentViewModel @Inject constructor(
         }
         providerStore.setSelection(provider, modelId)
         _provider.value = provider
-        _selection.value = providerStore.getSelection()
+        val displayName = LlmModelCatalog.displayNameFor(_modelPickerState.value.models, modelId)
+        _selection.value = LlmSelectionState(
+            provider = provider,
+            modelId = modelId,
+            modelDisplayName = displayName,
+        )
         _error.value = null
     }
 
@@ -149,6 +208,8 @@ class AgentViewModel @Inject constructor(
         providerStore.setApiKey(provider, apiKey)
         _credentials.value = providerStore.getCredentialState()
         _error.value = null
+        _modelPickerState.value = ModelPickerUiState()
+        loadModelCatalog(force = true)
     }
 
     fun setTrustPolicyMode(
@@ -177,6 +238,10 @@ class AgentViewModel @Inject constructor(
             _error.value = "API key required. Tap the key icon in AI Architect to add one."
             return
         }
+        if (!_selection.value.hasModel) {
+            _error.value = "No model selected. Open the model picker — catalog may show Coming soon until loaded."
+            return
+        }
         _composerDraft.value = ""
         sendUserMessage(trimmed, systemPromptAppendix)
     }
@@ -187,6 +252,10 @@ class AgentViewModel @Inject constructor(
         if (_busy.value || _enhancingPrompt.value) return
         if (!_credentials.value.hasKey(_provider.value)) {
             _error.value = "API key required. Tap the key icon in AI Architect to add one."
+            return
+        }
+        if (!_selection.value.hasModel) {
+            _error.value = "No model selected. Open the model picker — catalog may show Coming soon until loaded."
             return
         }
         viewModelScope.launch {
@@ -220,6 +289,10 @@ class AgentViewModel @Inject constructor(
         }
         if (!_credentials.value.hasKey(_provider.value)) {
             _error.value = "API key required. Tap the key icon in AI Architect to add one."
+            return
+        }
+        if (!_selection.value.hasModel) {
+            _error.value = "No model selected. Open the model picker — catalog may show Coming soon until loaded."
             return
         }
         viewModelScope.launch {
@@ -325,26 +398,31 @@ class AgentViewModel @Inject constructor(
             val model = llmClientResolver.modelFor(activeProvider)
             val modelSpanId = UUID.randomUUID().toString()
             val modelStartedAt = System.currentTimeMillis()
-            llmClientResolver.clientFor(activeProvider).streamMessage(
-                model = model,
-                systemPrompt = systemPrompt,
-                messages = apiHistory,
-                tools = toolsJson,
-                maxTokens = IdeConstants.MAX_OUTPUT_TOKENS,
-            ).collect { ev ->
-                when (ev) {
-                    is StreamEvent.TextDelta -> {
-                        if (firstTokenMs == null) {
-                            firstTokenMs = System.currentTimeMillis() - modelStartedAt
+            if (model.isBlank()) {
+                streamError =
+                    "No model selected for ${activeProvider.displayName}. Pick a model or wait for Coming soon providers."
+            } else {
+                llmClientResolver.clientFor(activeProvider).streamMessage(
+                    model = model,
+                    systemPrompt = systemPrompt,
+                    messages = apiHistory,
+                    tools = toolsJson,
+                    maxTokens = IdeConstants.MAX_OUTPUT_TOKENS,
+                ).collect { ev ->
+                    when (ev) {
+                        is StreamEvent.TextDelta -> {
+                            if (firstTokenMs == null) {
+                                firstTokenMs = System.currentTimeMillis() - modelStartedAt
+                            }
+                            textBuf.append(ev.text)
+                            updateStreamingAssistant(textBuf.toString())
                         }
-                        textBuf.append(ev.text)
-                        updateStreamingAssistant(textBuf.toString())
+                        is StreamEvent.ToolUseComplete -> toolCalls.add(
+                            ToolCall(id = ev.id, name = ev.name, input = ev.input),
+                        )
+                        is StreamEvent.Failure -> streamError = ev.message
+                        is StreamEvent.Finished -> Unit
                     }
-                    is StreamEvent.ToolUseComplete -> toolCalls.add(
-                        ToolCall(id = ev.id, name = ev.name, input = ev.input),
-                    )
-                    is StreamEvent.Failure -> streamError = ev.message
-                    is StreamEvent.Finished -> Unit
                 }
             }
             val modelDurationMs = System.currentTimeMillis() - modelStartedAt

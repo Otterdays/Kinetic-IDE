@@ -53,6 +53,9 @@ import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.browser.customtabs.CustomTabsIntent
+import com.tabletaide.ide.data.GitHubOAuthUiState
+import com.tabletaide.ide.data.GitHubRepo
 import com.tabletaide.ide.data.GitSavedAuthState
 import com.tabletaide.ide.data.RecentWorkspaceEntry
 import com.tabletaide.ide.data.StarterProjectTemplate
@@ -63,6 +66,7 @@ fun StartupGatewayScreen(
     recentWorkspaces: List<RecentWorkspaceEntry>,
     statusMessage: String?,
     cloneUiState: GitCloneUiState,
+    githubOAuthState: GitHubOAuthUiState,
     checkAllFilesAccess: () -> Boolean,
     onPeekSavedGitAuth: (String) -> GitSavedAuthState?,
     onClearSavedGitAuth: (String) -> Unit,
@@ -71,6 +75,10 @@ fun StartupGatewayScreen(
     onOpenRecentWorkspace: (String) -> Unit,
     onCreateStarterProject: (Uri, String, StarterProjectTemplate) -> Unit,
     onCloneRepository: (Uri, String, String, String, Boolean, Boolean) -> Unit,
+    onBeginGitHubSignIn: () -> Uri?,
+    onGitHubSignOut: () -> Unit,
+    onLoadGitHubRepos: () -> Unit,
+    onCloneGitHubRepository: (Uri, GitHubRepo) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -137,6 +145,7 @@ fun StartupGatewayScreen(
             selectedDestinationLabel = cloneDestinationLabel,
             hasAllFilesAccess = hasAllFilesAccess,
             cloneUiState = cloneUiState,
+            githubOAuthState = githubOAuthState,
             lookupSavedAuth = onPeekSavedGitAuth,
             onPickDestination = pickCloneDestination,
             onOpenManageFilesAccess = {
@@ -153,6 +162,16 @@ fun StartupGatewayScreen(
                 context.startActivity(intent)
             },
             onClearSavedAuth = onClearSavedGitAuth,
+            onGitHubSignIn = {
+                val authUri = onBeginGitHubSignIn() ?: return@CloneRepositoryDialog
+                CustomTabsIntent.Builder().build().launchUrl(context, authUri)
+            },
+            onGitHubSignOut = onGitHubSignOut,
+            onLoadGitHubRepos = onLoadGitHubRepos,
+            onCloneGitHubRepo = { repo ->
+                val targetUri = cloneDestinationUri ?: return@CloneRepositoryDialog
+                onCloneGitHubRepository(targetUri, repo)
+            },
             onDismiss = {
                 showCloneDialog = false
                 cloneDestinationUri = null
@@ -273,7 +292,7 @@ fun StartupGatewayScreen(
                 )
                 GatewayActionCard(
                     title = "Clone Repository",
-                    body = "Stage the repository URL and destination now; wire real cloning later.",
+                    body = "Sign in with GitHub to browse repos, or paste an HTTPS URL and clone to device storage.",
                     icon = Icons.Default.Link,
                     accent = KineticColors.railAccent,
                     modifier = Modifier.weight(1f),

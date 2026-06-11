@@ -34,14 +34,23 @@ data class LlmCredentialState(
     }
 
     fun hasKey(provider: LlmProvider): Boolean = storedKey(provider).isNotBlank()
+
+    fun hasAnyKey(): Boolean = LlmProvider.entries.any(::hasKey)
 }
 
 data class LlmSelectionState(
     val provider: LlmProvider,
     val modelId: String,
+    val modelDisplayName: String? = null,
 ) {
     val label: String
-        get() = LlmModelCatalog.findModel(modelId)?.displayName ?: modelId
+        get() = when {
+            !modelDisplayName.isNullOrBlank() -> modelDisplayName
+            modelId.isNotBlank() -> modelId
+            else -> "Coming soon"
+        }
+
+    val hasModel: Boolean get() = modelId.isNotBlank()
 }
 
 @Singleton
@@ -65,11 +74,8 @@ class LlmProviderStore @Inject constructor(
         prefs.edit().putString(providerKey, provider.id).apply()
     }
 
-    fun getSelectedModel(provider: LlmProvider = getProvider()): String {
-        val saved = prefs.getString(modelKey(provider), null)
-        if (!saved.isNullOrBlank()) return saved
-        return LlmModelCatalog.defaultModel(provider)
-    }
+    fun getSelectedModel(provider: LlmProvider = getProvider()): String =
+        prefs.getString(modelKey(provider), null).orEmpty().trim()
 
     fun setSelectedModel(provider: LlmProvider, modelId: String) {
         prefs.edit().putString(modelKey(provider), modelId.trim()).apply()

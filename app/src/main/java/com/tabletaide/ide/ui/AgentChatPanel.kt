@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import com.tabletaide.ide.data.LlmCredentialState
 import com.tabletaide.ide.data.LlmProvider
 import com.tabletaide.ide.data.LlmSelectionState
+import com.tabletaide.ide.data.ModelPickerUiState
 import com.tabletaide.ide.data.TelemetrySummary
 import com.tabletaide.ide.ui.theme.KineticColors
 import java.util.Locale
@@ -59,6 +60,7 @@ fun AgentChatPanel(
     error: String?,
     selection: LlmSelectionState,
     credentials: LlmCredentialState,
+    modelPickerState: ModelPickerUiState,
     telemetrySummary: TelemetrySummary,
     composerDraft: String,
     onDraftChange: (String) -> Unit,
@@ -66,6 +68,7 @@ fun AgentChatPanel(
     onEnhancePrompt: () -> Unit,
     onClear: () -> Unit,
     onModelSelect: (LlmProvider, String) -> Unit,
+    onLoadModels: () -> Unit,
     onOpenApiKeys: () -> Unit,
     /** Workspace-relative revert for captured write/edit tool rows ([TRACE: DOCS/ROADMAP.md] Epic 2.2). */
     onRevertToolMutation: (String) -> Unit,
@@ -79,9 +82,11 @@ fun AgentChatPanel(
     val clipboard = LocalClipboardManager.current
     val currentProvider = selection.provider
     val hasSelectedProviderKey = credentials.hasKey(currentProvider)
-    val sendEnabled = !busy && !enhancingPrompt && composerDraft.isNotBlank() && hasSelectedProviderKey
+    val hasModel = selection.hasModel
+    val sendEnabled =
+        !busy && !enhancingPrompt && composerDraft.isNotBlank() && hasSelectedProviderKey && hasModel
     val enhanceEnabled =
-        !busy && !enhancingPrompt && composerDraft.isNotBlank() && hasSelectedProviderKey
+        !busy && !enhancingPrompt && composerDraft.isNotBlank() && hasSelectedProviderKey && hasModel
     val modelLabel = if (hasSelectedProviderKey) {
         "${selection.provider.displayName} · ${selection.label}"
     } else {
@@ -131,8 +136,10 @@ fun AgentChatPanel(
                         currentProvider = selection.provider,
                         currentModelId = selection.modelId,
                         credentials = credentials,
+                        pickerState = modelPickerState,
                         onDismiss = { modelPickerVisible = false },
                         onSelect = onModelSelect,
+                        onLoadModels = onLoadModels,
                         onOpenApiKeys = {
                             modelPickerVisible = false
                             onOpenApiKeys()

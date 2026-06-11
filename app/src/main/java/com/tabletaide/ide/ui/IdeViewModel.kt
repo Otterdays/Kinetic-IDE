@@ -13,6 +13,13 @@ import com.tabletaide.ide.data.EditorSessionStore
 import com.tabletaide.ide.data.ExplorerPinsStore
 import com.tabletaide.ide.data.GitAuthDialogState
 import com.tabletaide.ide.data.GitAuthEntry
+import com.tabletaide.ide.data.GitHubApiClient
+import com.tabletaide.ide.data.GitHubOAuthConfig
+import com.tabletaide.ide.data.GitHubOAuthService
+import com.tabletaide.ide.data.GitHubOAuthUiState
+import com.tabletaide.ide.data.GitHubRepo
+import com.tabletaide.ide.data.GitHubRepoListState
+import com.tabletaide.ide.data.GitHubSessionState
 import com.tabletaide.ide.data.GitCommitDialogState
 import com.tabletaide.ide.data.GitCommitRequest
 import com.tabletaide.ide.data.GitCommitService
@@ -92,6 +99,8 @@ class IdeViewModel @Inject constructor(
     private val explorerPins: ExplorerPinsStore,
     private val recentWorkspacesStore: RecentWorkspacesStore,
     private val gitAuthStore: GitAuthStore,
+    private val githubOAuthService: GitHubOAuthService,
+    private val githubApiClient: GitHubApiClient,
     private val cloneTargetResolver: CloneTargetResolver,
     private val gitCloneService: GitCloneService,
     private val gitRepositoryResolver: GitRepositoryResolver,
@@ -118,6 +127,9 @@ class IdeViewModel @Inject constructor(
 
     private val _cloneUiState = MutableStateFlow(GitCloneUiState())
     val cloneUiState: StateFlow<GitCloneUiState> = _cloneUiState.asStateFlow()
+
+    private val _githubOAuthState = MutableStateFlow(refreshGitHubOAuthState())
+    val githubOAuthState: StateFlow<GitHubOAuthUiState> = _githubOAuthState.asStateFlow()
 
     private val _gitRepoState = MutableStateFlow(
         GitRepoUiState(message = "Open a git repository root to use commit and push."),
@@ -653,6 +665,110 @@ class IdeViewModel @Inject constructor(
 
     fun clearCloneFeedback() {
         _cloneUiState.value = GitCloneUiState()
+    }
+
+    fun beginGitHubSignIn(): android.net.Uri? {
+        if (!GitHubOAuthConfig.isConfigured()) {
+            _githubOAuthState.update {
+                it.copy(errorMessage = "Add githubOAuthClientId to local.properties and rebuild.")
+            }
+            return null
+        }
+        return githubOAuthService.beginAuthorization().fold(
+            onSuccess = { uri ->
+                _githubOAuthState.update {
+                    it.copy(authorizing = true, errorMessage = null)
+                }
+                uri
+            },
+            onFailure = { error ->
+                _githubOAuthState.update {
+                    it.copy(errorMessage = error.message ?: "Could not start GitHub sign-in.")
+                }
+                null
+            },
+        )
+    }
+
+    fun completeGitHubSignIn(callbackUri: Uri) {
+        viewModelScope.launch {
+            _githubOAuthState.update { it.copy(authorizing = true, errorMessage = null) }
+            githubOAuthService.completeAuthorization(callbackUri).fold(
+                onSuccess = {
+                    _githubOAuthState.value = refreshGitHubOAuthState().copy(
+                        authorizing = false,
+                        repoList = GitHubRepoListState(),
+                    )
+                    loadGitHubRepos(force = true)
+                },
+                onFailure = { error ->
+                    _githubOAuthState.value = refreshGitHubOAuthState().copy(
+                        authorizing = false,
+                        errorMessage = error.message ?: "GitHub sign-in failed.",
+                    )
+                },
+            )
+        }
+    }
+
+    fun loadGitHubRepos(force: Boolean = false) {
+        val current = _githubOAuthState.value
+        if (!current.session.signedIn) return
+        if (current.repoList.loading) return
+        if (current.repoList.loaded && !force) return
+        viewModelScope.launch {
+            _githubOAuthState.update {
+                it.copy(repoList = it.repoList.copy(loading = true, errorMessage = null))
+            }
+            githubApiClient.listAccessibleRepos().fold(
+                onSuccess = { repos ->
+                    _githubOAuthState.update {
+                        it.copy(
+                            repoList = GitHubRepoListState(
+                                loading = false,
+                                loaded = true,
+                                repos = repos,
+                            ),
+                            errorMessage = null,
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    _githubOAuthState.update {
+                        it.copy(
+                            repoList = it.repoList.copy(
+                                loading = false,
+                                loaded = true,
+                                errorMessage = error.message ?: "Failed to load repositories.",
+                            ),
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun signOutGitHub() {
+        githubOAuthService.signOut()
+        _githubOAuthState.value = refreshGitHubOAuthState()
+    }
+
+    fun cloneGitHubRepository(parentTreeUri: Uri, repo: GitHubRepo) {
+        cloneRepository(
+            parentTreeUri = parentTreeUri,
+            repoUrl = repo.cloneUrl,
+            usernameInput = "",
+            tokenInput = "",
+            useSavedToken = true,
+            saveToken = true,
+        )
+    }
+
+    private fun refreshGitHubOAuthState(): GitHubOAuthUiState {
+        return GitHubOAuthUiState(
+            oauthConfigured = GitHubOAuthConfig.isConfigured(),
+            session = githubOAuthService.currentSession(),
+        )
     }
 
     fun showCommitDialog(autoGenerateMessage: Boolean = false) {

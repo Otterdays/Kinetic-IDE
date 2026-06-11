@@ -103,6 +103,7 @@ fun TabletIdeScreen(
     val enhancingPrompt by agentVm.enhancingPrompt.collectAsState()
     val agentError by agentVm.error.collectAsState()
     val modelSelection by agentVm.selection.collectAsState()
+    val modelPickerState by agentVm.modelPickerState.collectAsState()
     val credentials by agentVm.credentials.collectAsState()
     val telemetrySummary by agentVm.telemetrySummary.collectAsState()
     val auditEntries by agentVm.auditEntries.collectAsState()
@@ -692,6 +693,7 @@ fun TabletIdeScreen(
                             error = agentError,
                             selection = modelSelection,
                             credentials = credentials,
+                            modelPickerState = modelPickerState,
                             telemetrySummary = telemetrySummary,
                             composerDraft = composerDraft,
                             onDraftChange = agentVm::updateComposerDraft,
@@ -703,6 +705,7 @@ fun TabletIdeScreen(
                             },
                             onClear = agentVm::clearConversation,
                             onModelSelect = agentVm::setSelection,
+                            onLoadModels = { agentVm.loadModelCatalog(force = true) },
                             onOpenApiKeys = { apiKeysDialogVisible = true },
                             onRevertToolMutation = agentVm::revertToolMutation,
                             onApplyToolMutation = agentVm::applyToolMutation,
