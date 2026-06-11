@@ -29,6 +29,7 @@ class GeminiMessageCodecTest {
         assertEquals("model", modelTurn.optString("role"))
         val part = modelTurn.getJSONArray("parts").getJSONObject(0)
         val functionCall = part.getJSONObject("functionCall")
+        assertEquals("call_1", functionCall.optString("id"))
         assertEquals("read_file", functionCall.optString("name"))
         assertEquals("README.md", functionCall.getJSONObject("args").optString("path"))
     }
@@ -55,6 +56,7 @@ class GeminiMessageCodecTest {
             .getJSONObject(0)
             .getJSONObject("functionResponse")
         assertEquals("read_file", response.optString("name"))
+        assertEquals("call_1", response.optString("id"))
         assertEquals("hello", response.getJSONObject("response").optString("result"))
     }
 

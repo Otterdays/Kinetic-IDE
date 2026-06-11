@@ -23,6 +23,11 @@ class AgentToolRoundTripTest {
         assertTrue(modelTurn.getJSONArray("parts").getJSONObject(1).has("functionCall"))
         val userTurn = contents.getJSONObject(2)
         assertTrue(userTurn.getJSONArray("parts").getJSONObject(0).has("functionResponse"))
+        val functionResponse = userTurn.getJSONArray("parts")
+            .getJSONObject(0)
+            .getJSONObject("functionResponse")
+        assertEquals("call_1", functionResponse.optString("id"))
+        assertEquals("read_file", functionResponse.optString("name"))
     }
 
     @Test

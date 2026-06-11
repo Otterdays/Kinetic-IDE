@@ -47,6 +47,7 @@ object GeminiMessageCodec {
                     }
                 }
                 "tool_use" -> {
+                    val toolUseId = part.optString("id", "unknown")
                     val name = part.optString("name", "unknown")
                     val input = part.optJSONObject("input") ?: JSONObject()
                     parts.put(
@@ -54,6 +55,7 @@ object GeminiMessageCodec {
                             put(
                                 "functionCall",
                                 JSONObject().apply {
+                                    put("id", toolUseId)
                                     put("name", name)
                                     put("args", input)
                                 },
@@ -69,6 +71,7 @@ object GeminiMessageCodec {
                             put(
                                 "functionResponse",
                                 JSONObject().apply {
+                                    put("id", toolUseId)
                                     put("name", toolName)
                                     put(
                                         "response",

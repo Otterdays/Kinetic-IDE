@@ -93,9 +93,7 @@ class GeminiClientImpl @Inject constructor(
             if (toolConfig != null) {
                 put("toolConfig", toolConfig)
             }
-            put("generationConfig", JSONObject().apply {
-                put("maxOutputTokens", maxTokens)
-            })
+            put("generationConfig", buildGenerationConfig(model, maxTokens, functionDeclarations != null))
         }
 
         val media = "application/json; charset=utf-8".toMediaType()
@@ -154,8 +152,11 @@ class GeminiClientImpl @Inject constructor(
                     val funcCall = part.getJSONObject("functionCall")
                     val name = funcCall.optString("name", "unknown")
                     val args = funcCall.optJSONObject("args") ?: JSONObject()
+                    val callId = funcCall.optString("id").trim().ifEmpty {
+                        "call_${System.currentTimeMillis()}_$name"
+                    }
                     return StreamEvent.ToolUseComplete(
-                        id = "call_${System.currentTimeMillis()}_$name",
+                        id = callId,
                         name = name,
                         input = args,
                     )
@@ -172,4 +173,20 @@ class GeminiClientImpl @Inject constructor(
         val id: String,
         val args: StringBuilder = StringBuilder(),
     )
+
+    private fun buildGenerationConfig(
+        model: String,
+        maxTokens: Int,
+        hasTools: Boolean,
+    ): JSONObject = JSONObject().apply {
+        put("maxOutputTokens", maxTokens)
+        if (hasTools && model.lowercase().startsWith("gemini-3")) {
+            put(
+                "thinkingConfig",
+                JSONObject().apply {
+                    put("thinkingLevel", "MEDIUM")
+                },
+            )
+        }
+    }
 }
